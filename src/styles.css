@@ -59,7 +59,39 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-board: var(--board);
+  --color-board-square: var(--board-square);
+  --color-board-square-alt: var(--board-square-alt);
+  --color-board-goal: var(--board-goal);
+  --color-p1: var(--p1);
+  --color-p1-glow: var(--p1-glow);
+  --color-p2: var(--p2);
+  --color-p2-glow: var(--p2-glow);
+  --color-valid: var(--valid);
+  --color-capture: var(--capture);
+  --font-display: "Bungee", ui-sans-serif, system-ui;
+  --font-sans: "Outfit", ui-sans-serif, system-ui;
+  --animate-dice-roll: dice-roll 0.5s ease-out;
+  --animate-capture-flash: capture-flash 0.45s ease-out;
+  --animate-pop: pop 0.25s ease-out;
+
+  @keyframes dice-roll {
+    0% { transform: rotate(0deg) scale(1); }
+    40% { transform: rotate(180deg) scale(1.25); }
+    70% { transform: rotate(320deg) scale(0.92); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+  @keyframes capture-flash {
+    0% { transform: scale(1); opacity: 1; }
+    45% { transform: scale(1.7); opacity: 1; box-shadow: 0 0 0 8px var(--capture); }
+    100% { transform: scale(0.2); opacity: 0; }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.6); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
 }
+
 
 :root {
   --radius: 0.625rem;
