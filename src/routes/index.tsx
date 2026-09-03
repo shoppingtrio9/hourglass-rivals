@@ -26,7 +26,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Pass-and-play dice board game on a 7-row hourglass grid. Move, capture and race all 16 pieces home.",
+          "Pass-and-play dice board game on a 9-row hourglass grid. Move, capture and race all 16 pieces home.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
