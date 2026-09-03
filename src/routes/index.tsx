@@ -46,6 +46,8 @@ function Game() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moveCount, setMoveCount] = useState(0);
   const [captured, setCaptured] = useState<string | null>(null);
+  const [vanishing, setVanishing] = useState<string | null>(null);
+  const [reached, setReached] = useState<Record<Player, number>>({ 1: 0, 2: 0 });
   const [winner, setWinner] = useState<Player | null>(null);
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
@@ -62,6 +64,8 @@ function Game() {
     setSelectedId(null);
     setMoveCount(0);
     setCaptured(null);
+    setVanishing(null);
+    setReached({ 1: 0, 2: 0 });
     setWinner(null);
   }, []);
 
@@ -99,23 +103,33 @@ function Game() {
         setCaptured(victim.id);
         window.setTimeout(() => setCaptured(null), 450);
       }
+      const reachedHome = isHomeSquare(selected.player, row);
       const next = pieces.map((p) => {
         if (p.id === selected.id) {
-          const home = isHomeSquare(p.player, row);
-          return { ...p, row, col, home };
+          return { ...p, row, col };
         }
         if (victim && p.id === victim.id) {
-          return { ...p, row: p.startRow, col: p.startCol, home: false };
+          return { ...p, row: p.startRow, col: p.startCol };
         }
         return p;
       });
       setPieces(next);
       setMoveCount((m) => m + 1);
-      if (homeCount(next, selected.player) === 16) {
-        setWinner(selected.player);
-        setDice(null);
-        setSelectedId(null);
-        return;
+      if (reachedHome) {
+        // Piece vanishes from the board with a sparkle effect, but still counts.
+        setVanishing(selected.id);
+        const newTotal = reached[selected.player] + 1;
+        setReached((r) => ({ ...r, [selected.player]: newTotal }));
+        window.setTimeout(() => {
+          setPieces((prev) => prev.filter((p) => p.id !== selected.id));
+          setVanishing(null);
+        }, 550);
+        if (newTotal === 16) {
+          setWinner(selected.player);
+          setDice(null);
+          setSelectedId(null);
+          return;
+        }
       }
       endTurn();
       return;
