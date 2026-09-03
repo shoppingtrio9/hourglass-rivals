@@ -68,7 +68,7 @@ function Game() {
   const roll = () => {
     if (rolling || dice !== null || winner) return;
     setRolling(true);
-    const value = 1 + Math.floor(Math.random() * 6);
+    const value = 1 + Math.floor(Math.random() * 3);
     window.setTimeout(() => {
       setDice(value);
       setRolling(false);
