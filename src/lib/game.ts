@@ -1,6 +1,6 @@
-export const ROW_WIDTHS: number[] = [8, 8, 10, 10, 10, 8, 8];
+export const ROW_WIDTHS: number[] = [8, 8, 10, 10, 10, 10, 10, 8, 8];
 export const MAX_COLS = 10;
-export const ROWS = 7;
+export const ROWS = 9;
 
 /** Column offset for a row within the 10-wide grid. */
 export const rowWidth = (row: number) => ROW_WIDTHS[row] ?? 0;
@@ -24,15 +24,15 @@ export type Piece = {
   home: boolean;
 };
 
-export const targetRows = (player: Player) => (player === 1 ? [5, 6] : [0, 1]);
+export const targetRows = (player: Player) => (player === 1 ? [7, 8] : [0, 1]);
 
 export function createPieces(): Piece[] {
   const pieces: Piece[] = [];
   const setup: Array<[Player, number]> = [
     [1, 0],
     [1, 1],
-    [2, 5],
-    [2, 6],
+    [2, 7],
+    [2, 8],
   ];
   for (const [player, row] of setup) {
     const off = rowOffset(row);
