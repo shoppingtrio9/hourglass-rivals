@@ -3,12 +3,13 @@ export const MAX_COLS = 10;
 export const ROWS = 7;
 
 /** Column offset for a row within the 10-wide grid. */
-export const rowOffset = (row: number) => (MAX_COLS - ROW_WIDTHS[row]) / 2;
+export const rowWidth = (row: number) => ROW_WIDTHS[row] ?? 0;
+export const rowOffset = (row: number) => (MAX_COLS - rowWidth(row)) / 2;
 
 export const isPlayable = (row: number, col: number) => {
   if (row < 0 || row >= ROWS) return false;
   const off = rowOffset(row);
-  return col >= off && col < off + ROW_WIDTHS[row];
+  return col >= off && col < off + rowWidth(row);
 };
 
 export type Player = 1 | 2;
@@ -35,7 +36,7 @@ export function createPieces(): Piece[] {
   ];
   for (const [player, row] of setup) {
     const off = rowOffset(row);
-    for (let i = 0; i < ROW_WIDTHS[row]; i++) {
+    for (let i = 0; i < rowWidth(row); i++) {
       const col = off + i;
       pieces.push({
         id: `p${player}-${row}-${col}`,

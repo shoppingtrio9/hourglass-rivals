@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   MAX_COLS,
   ROWS,
-  ROW_WIDTHS,
+  rowWidth,
   createPieces,
   homeCount,
   isHomeSquare,
@@ -167,7 +167,7 @@ function Game() {
                 className="grid gap-[2px] py-[1px]"
                 style={{ gridTemplateColumns: `repeat(${MAX_COLS}, minmax(0, 1fr))` }}
               >
-                {Array.from({ length: ROW_WIDTHS[row] }, (_, i) => {
+                {Array.from({ length: rowWidth(row) }, (_, i) => {
                   const col = off + i;
                   const piece = pieceAt(pieces, row, col);
                   const isDest = moves.some((m) => m.row === row && m.col === col);
