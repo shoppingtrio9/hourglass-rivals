@@ -5,7 +5,6 @@ import {
   ROWS,
   rowWidth,
   createPieces,
-  homeCount,
   isHomeSquare,
   pieceAt,
   rowOffset,
@@ -27,7 +26,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Pass-and-play dice board game on a 7-row hourglass grid. Move, capture and race all 16 pieces home.",
+          "Pass-and-play dice board game on a 9-row hourglass grid. Move, capture and race all 16 pieces home.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -46,6 +45,8 @@ function Game() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moveCount, setMoveCount] = useState(0);
   const [captured, setCaptured] = useState<string | null>(null);
+  const [vanishing, setVanishing] = useState<string | null>(null);
+  const [reached, setReached] = useState<Record<Player, number>>({ 1: 0, 2: 0 });
   const [winner, setWinner] = useState<Player | null>(null);
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
@@ -62,6 +63,8 @@ function Game() {
     setSelectedId(null);
     setMoveCount(0);
     setCaptured(null);
+    setVanishing(null);
+    setReached({ 1: 0, 2: 0 });
     setWinner(null);
   }, []);
 
@@ -99,23 +102,33 @@ function Game() {
         setCaptured(victim.id);
         window.setTimeout(() => setCaptured(null), 450);
       }
+      const reachedHome = isHomeSquare(selected.player, row);
       const next = pieces.map((p) => {
         if (p.id === selected.id) {
-          const home = isHomeSquare(p.player, row);
-          return { ...p, row, col, home };
+          return { ...p, row, col };
         }
         if (victim && p.id === victim.id) {
-          return { ...p, row: p.startRow, col: p.startCol, home: false };
+          return { ...p, row: p.startRow, col: p.startCol };
         }
         return p;
       });
       setPieces(next);
       setMoveCount((m) => m + 1);
-      if (homeCount(next, selected.player) === 16) {
-        setWinner(selected.player);
-        setDice(null);
-        setSelectedId(null);
-        return;
+      if (reachedHome) {
+        // Piece vanishes from the board with a sparkle effect, but still counts.
+        setVanishing(selected.id);
+        const newTotal = reached[selected.player] + 1;
+        setReached((r) => ({ ...r, [selected.player]: newTotal }));
+        window.setTimeout(() => {
+          setPieces((prev) => prev.filter((p) => p.id !== selected.id));
+          setVanishing(null);
+        }, 550);
+        if (newTotal === 16) {
+          setWinner(selected.player);
+          setDice(null);
+          setSelectedId(null);
+          return;
+        }
       }
       endTurn();
       return;
@@ -128,8 +141,8 @@ function Game() {
     setSelectedId(null);
   };
 
-  const p1Home = homeCount(pieces, 1);
-  const p2Home = homeCount(pieces, 2);
+  const p1Home = reached[1];
+  const p2Home = reached[2];
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-background text-foreground">
@@ -158,7 +171,10 @@ function Game() {
       </header>
 
       <section className="flex flex-1 items-center justify-center px-2 py-3">
-        <div className="w-full max-w-[420px] rounded-3xl bg-board p-2 shadow-lg">
+        <div
+          className="rounded-3xl bg-board p-2 shadow-lg"
+          style={{ width: "min(100%, 420px, calc((100dvh - 340px) * 10 / 9))" }}
+        >
           {Array.from({ length: ROWS }, (_, row) => {
             const off = rowOffset(row);
             return (
@@ -195,12 +211,16 @@ function Game() {
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
-                            captured === piece.id ? "animate-capture-flash" : "animate-pop"
-                          } ${piece.home ? "opacity-70 border-dashed" : ""}`}
+                            captured === piece.id
+                              ? "animate-capture-flash"
+                              : vanishing === piece.id
+                                ? "animate-vanish"
+                                : "animate-pop"
+                          }`}
                         >
-                          {piece.home && (
-                            <span className="absolute inset-0 grid place-items-center text-[8px] font-bold text-primary-foreground">
-                              ★
+                          {vanishing === piece.id && (
+                            <span className="absolute -inset-1 grid place-items-center text-xs animate-sparkle">
+                              ✦
                             </span>
                           )}
                         </span>
