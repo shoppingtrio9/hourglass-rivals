@@ -5,7 +5,6 @@ import {
   ROWS,
   rowWidth,
   createPieces,
-  homeCount,
   isHomeSquare,
   pieceAt,
   rowOffset,
@@ -142,8 +141,8 @@ function Game() {
     setSelectedId(null);
   };
 
-  const p1Home = homeCount(pieces, 1);
-  const p2Home = homeCount(pieces, 2);
+  const p1Home = reached[1];
+  const p2Home = reached[2];
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-background text-foreground">
@@ -172,7 +171,10 @@ function Game() {
       </header>
 
       <section className="flex flex-1 items-center justify-center px-2 py-3">
-        <div className="w-full max-w-[420px] rounded-3xl bg-board p-2 shadow-lg">
+        <div
+          className="rounded-3xl bg-board p-2 shadow-lg"
+          style={{ width: "min(100%, 420px, calc((100dvh - 340px) * 10 / 9))" }}
+        >
           {Array.from({ length: ROWS }, (_, row) => {
             const off = rowOffset(row);
             return (
@@ -209,12 +211,16 @@ function Game() {
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
-                            captured === piece.id ? "animate-capture-flash" : "animate-pop"
-                          } ${piece.home ? "opacity-70 border-dashed" : ""}`}
+                            captured === piece.id
+                              ? "animate-capture-flash"
+                              : vanishing === piece.id
+                                ? "animate-vanish"
+                                : "animate-pop"
+                          }`}
                         >
-                          {piece.home && (
-                            <span className="absolute inset-0 grid place-items-center text-[8px] font-bold text-primary-foreground">
-                              ★
+                          {vanishing === piece.id && (
+                            <span className="absolute -inset-1 grid place-items-center text-xs animate-sparkle">
+                              ✦
                             </span>
                           )}
                         </span>
