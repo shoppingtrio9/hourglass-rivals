@@ -1,4 +1,4 @@
-export const ROW_WIDTHS = [8, 8, 10, 10, 10, 8, 8] as const;
+export const ROW_WIDTHS: number[] = [8, 8, 10, 10, 10, 8, 8];
 export const MAX_COLS = 10;
 export const ROWS = 7;
 
