@@ -3,9 +3,11 @@ import { useCallback, useMemo, useState } from "react";
 import {
   MAX_COLS,
   ROWS,
+  PIECES_PER_PLAYER,
   rowWidth,
   createPieces,
   isHomeSquare,
+  isSafe,
   pieceAt,
   rowOffset,
   validMoves,
@@ -16,17 +18,17 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Hourglass Duel — 2-Player Ludo/Chess Hybrid" },
+      { title: "Hourglass Duel — 2-Player Dice Board Game" },
       {
         name: "description",
         content:
-          "A pass-and-play mobile board game: roll the dice, march 16 pieces across an hourglass board, capture rivals and get everyone home first.",
+          "A pass-and-play mobile board game: roll 1-3, split your points across pieces, dodge safe zones and race all 8 pieces home.",
       },
       { property: "og:title", content: "Hourglass Duel — 2-Player Board Game" },
       {
         property: "og:description",
         content:
-          "Pass-and-play dice board game on a 9-row hourglass grid. Move, capture and race all 16 pieces home.",
+          "Pass-and-play dice board game on a 7-row hourglass grid. Split dice points, capture rivals and get all 8 pieces home.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -41,6 +43,7 @@ function Game() {
   const [pieces, setPieces] = useState<Piece[]>(createPieces);
   const [turn, setTurn] = useState<Player>(1);
   const [dice, setDice] = useState<number | null>(null);
+  const [points, setPoints] = useState(0);
   const [rolling, setRolling] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moveCount, setMoveCount] = useState(0);
@@ -52,14 +55,15 @@ function Game() {
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
 
   const moves = useMemo(
-    () => (selected && dice ? validMoves(pieces, selected, dice) : []),
-    [selected, dice, pieces],
+    () => (selected && points > 0 ? validMoves(pieces, selected, points) : []),
+    [selected, points, pieces],
   );
 
   const reset = useCallback(() => {
     setPieces(createPieces());
     setTurn(1);
     setDice(null);
+    setPoints(0);
     setSelectedId(null);
     setMoveCount(0);
     setCaptured(null);
@@ -74,19 +78,23 @@ function Game() {
     const value = 1 + Math.floor(Math.random() * 3);
     window.setTimeout(() => {
       setDice(value);
+      setPoints(value);
       setRolling(false);
     }, 450);
   };
 
-  const anyMoveAvailable = useMemo(() => {
-    if (!dice) return true;
-    return pieces.some(
-      (p) => p.player === turn && !p.home && validMoves(pieces, p, dice).length > 0,
-    );
-  }, [pieces, dice, turn]);
+  const hasMoveWith = (list: Piece[], player: Player, pts: number) =>
+    pts > 0 &&
+    list.some((p) => p.player === player && !p.home && validMoves(list, p, pts).length > 0);
+
+  const anyMoveAvailable = useMemo(
+    () => (dice === null ? true : hasMoveWith(pieces, turn, points)),
+    [pieces, points, dice, turn],
+  );
 
   const endTurn = () => {
     setDice(null);
+    setPoints(0);
     setSelectedId(null);
     setTurn((t) => (t === 1 ? 2 : 1));
   };
@@ -94,9 +102,9 @@ function Game() {
   const tapSquare = (row: number, col: number) => {
     if (winner) return;
     const occupant = pieceAt(pieces, row, col);
-    const isDest = moves.some((m) => m.row === row && m.col === col);
+    const move = moves.find((m) => m.row === row && m.col === col);
 
-    if (isDest && selected && dice) {
+    if (move && selected && points > 0) {
       const victim = occupant && occupant.player !== selected.player ? occupant : null;
       if (victim) {
         setCaptured(victim.id);
@@ -104,18 +112,19 @@ function Game() {
       }
       const reachedHome = isHomeSquare(selected.player, row);
       const next = pieces.map((p) => {
-        if (p.id === selected.id) {
-          return { ...p, row, col };
-        }
-        if (victim && p.id === victim.id) {
+        if (p.id === selected.id) return { ...p, row, col };
+        if (victim && p.id === victim.id)
           return { ...p, row: p.startRow, col: p.startCol };
-        }
         return p;
       });
       setPieces(next);
       setMoveCount((m) => m + 1);
+      const remaining = points - move.steps;
+      setPoints(remaining);
+      setSelectedId(null);
+
+      let boardAfter = next;
       if (reachedHome) {
-        // Piece vanishes from the board with a sparkle effect, but still counts.
         setVanishing(selected.id);
         const newTotal = reached[selected.player] + 1;
         setReached((r) => ({ ...r, [selected.player]: newTotal }));
@@ -123,18 +132,20 @@ function Game() {
           setPieces((prev) => prev.filter((p) => p.id !== selected.id));
           setVanishing(null);
         }, 550);
-        if (newTotal === 16) {
+        boardAfter = next.filter((p) => p.id !== selected.id);
+        if (newTotal === PIECES_PER_PLAYER) {
           setWinner(selected.player);
           setDice(null);
-          setSelectedId(null);
+          setPoints(0);
           return;
         }
       }
-      endTurn();
+
+      if (remaining <= 0 || !hasMoveWith(boardAfter, turn, remaining)) endTurn();
       return;
     }
 
-    if (occupant && occupant.player === turn && !occupant.home && dice) {
+    if (occupant && occupant.player === turn && !occupant.home && points > 0) {
       setSelectedId(occupant.id === selectedId ? null : occupant.id);
       return;
     }
@@ -161,10 +172,10 @@ function Game() {
           </div>
           <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>
-              <span className="text-p1-glow">P1</span> {p1Home}/16 home
+              <span className="text-p1-glow">P1</span> {p1Home}/{PIECES_PER_PLAYER} home
             </p>
             <p>
-              <span className="text-p2-glow">P2</span> {p2Home}/16 home
+              <span className="text-p2-glow">P2</span> {p2Home}/{PIECES_PER_PLAYER} home
             </p>
           </div>
         </div>
@@ -173,14 +184,14 @@ function Game() {
       <section className="flex flex-1 items-center justify-center px-2 py-3">
         <div
           className="rounded-3xl bg-board p-2 shadow-lg"
-          style={{ width: "min(100%, 420px, calc((100dvh - 340px) * 10 / 9))" }}
+          style={{ width: "min(100%, 380px, calc((100dvh - 340px) * 6 / 7))" }}
         >
           {Array.from({ length: ROWS }, (_, row) => {
             const off = rowOffset(row);
             return (
               <div
                 key={row}
-                className="grid gap-[2px] py-[1px]"
+                className="grid gap-[3px] py-[1.5px]"
                 style={{ gridTemplateColumns: `repeat(${MAX_COLS}, minmax(0, 1fr))` }}
               >
                 {Array.from({ length: rowWidth(row) }, (_, i) => {
@@ -196,8 +207,12 @@ function Game() {
                       type="button"
                       onClick={() => tapSquare(row, col)}
                       style={{ gridColumnStart: col + 1 }}
-                      className={`relative aspect-square min-h-0 touch-manipulation rounded-[6px] transition-colors ${
-                        goal1 || goal2 ? "bg-board-goal/50" : (row + col) % 2 === 0 ? "bg-board-square" : "bg-board-square-alt"
+                      className={`relative aspect-square min-h-0 touch-manipulation rounded-[8px] transition-colors ${
+                        goal1 || goal2
+                          ? "bg-board-goal/50"
+                          : (row + col) % 2 === 0
+                            ? "bg-board-square"
+                            : "bg-board-square-alt"
                       } ${isDest ? "ring-2 ring-valid" : ""}`}
                       aria-label={`row ${row + 1} column ${col + 1}`}
                     >
@@ -211,6 +226,8 @@ function Game() {
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
+                            isSafe(piece) ? "opacity-95 shadow-inner" : ""
+                          } ${
                             captured === piece.id
                               ? "animate-capture-flash"
                               : vanishing === piece.id
@@ -218,6 +235,11 @@ function Game() {
                                 : "animate-pop"
                           }`}
                         >
+                          {isSafe(piece) && (
+                            <span className="absolute inset-0 grid place-items-center text-[9px] text-foreground/70">
+                              ✦
+                            </span>
+                          )}
                           {vanishing === piece.id && (
                             <span className="absolute -inset-1 grid place-items-center text-xs animate-sparkle">
                               ✦
@@ -241,9 +263,25 @@ function Game() {
             {dice === null
               ? "Roll to start your turn"
               : selected
-                ? `Tap a highlighted square (${dice})`
-                : `Tap one of your pieces (${dice})`}
+                ? `Tap a highlighted square`
+                : `Tap one of your pieces`}
           </span>
+        </div>
+        <div className="flex items-center justify-between rounded-xl bg-secondary/60 px-3 py-2">
+          <span className="text-xs uppercase tracking-widest text-muted-foreground">
+            Points left
+          </span>
+          <div className="flex items-center gap-1.5">
+            {Array.from({ length: dice ?? 0 }, (_, i) => (
+              <span
+                key={i}
+                className={`h-3 w-3 rounded-full ${i < points ? "bg-valid" : "bg-muted"}`}
+              />
+            ))}
+            <span className="ml-2 font-display text-sm">
+              {dice === null ? "–" : `${points}/${dice}`}
+            </span>
+          </div>
         </div>
         <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
           <div
@@ -288,7 +326,7 @@ function Game() {
               {PLAYER_LABEL[winner]} Wins!
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
-              All 16 pieces made it home in {moveCount} moves.
+              All {PIECES_PER_PLAYER} pieces made it home in {moveCount} moves.
             </p>
             <button
               type="button"

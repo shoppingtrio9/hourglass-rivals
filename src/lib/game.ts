@@ -1,8 +1,8 @@
-export const ROW_WIDTHS: number[] = [8, 8, 10, 10, 10, 10, 10, 8, 8];
-export const MAX_COLS = 10;
-export const ROWS = 9;
+export const ROW_WIDTHS: number[] = [4, 4, 6, 6, 6, 4, 4];
+export const MAX_COLS = 6;
+export const ROWS = 7;
 
-/** Column offset for a row within the 10-wide grid. */
+/** Column offset for a row within the widest row. */
 export const rowWidth = (row: number) => ROW_WIDTHS[row] ?? 0;
 export const rowOffset = (row: number) => (MAX_COLS - rowWidth(row)) / 2;
 
@@ -24,15 +24,18 @@ export type Piece = {
   home: boolean;
 };
 
-export const targetRows = (player: Player) => (player === 1 ? [7, 8] : [0, 1]);
+export const startRows = (player: Player) => (player === 1 ? [0, 1] : [5, 6]);
+export const targetRows = (player: Player) => (player === 1 ? [5, 6] : [0, 1]);
+
+export const PIECES_PER_PLAYER = 8;
 
 export function createPieces(): Piece[] {
   const pieces: Piece[] = [];
   const setup: Array<[Player, number]> = [
     [1, 0],
     [1, 1],
-    [2, 7],
-    [2, 8],
+    [2, 5],
+    [2, 6],
   ];
   for (const [player, row] of setup) {
     const off = rowOffset(row);
@@ -55,6 +58,9 @@ export function createPieces(): Piece[] {
 export const pieceAt = (pieces: Piece[], row: number, col: number) =>
   pieces.find((p) => p.row === row && p.col === col);
 
+/** A piece sitting in its own starting rows is safe: cannot be captured or passed. */
+export const isSafe = (piece: Piece) => startRows(piece.player).includes(piece.row);
+
 const DIRS = [
   [-1, 0],
   [1, 0],
@@ -62,32 +68,30 @@ const DIRS = [
   [0, 1],
 ] as const;
 
-/** Straight-line moves of exactly `steps`, path on-board and unobstructed. */
-export function validMoves(pieces: Piece[], piece: Piece, steps: number) {
-  const moves: Array<{ row: number; col: number }> = [];
-  if (piece.home) return moves;
+export type Move = { row: number; col: number; steps: number };
+
+/**
+ * All straight-line destinations reachable using between 1 and `maxSteps` points.
+ * Paths must stay on-board, unobstructed, and never cross or land on a safe piece.
+ */
+export function validMoves(pieces: Piece[], piece: Piece, maxSteps: number): Move[] {
+  const moves: Move[] = [];
+  if (piece.home || maxSteps <= 0) return moves;
   for (const [dr, dc] of DIRS) {
     let r = piece.row;
     let c = piece.col;
-    let ok = true;
-    for (let s = 1; s <= steps; s++) {
+    for (let s = 1; s <= maxSteps; s++) {
       r += dr;
       c += dc;
-      if (!isPlayable(r, c)) {
-        ok = false;
-        break;
-      }
+      if (!isPlayable(r, c)) break;
       const occupant = pieceAt(pieces, r, c);
-      if (occupant && s < steps) {
-        ok = false;
-        break;
+      if (occupant) {
+        if (occupant.player === piece.player || isSafe(occupant)) break;
+        moves.push({ row: r, col: c, steps: s });
+        break; // cannot continue past a piece
       }
-      if (occupant && s === steps && occupant.player === piece.player) {
-        ok = false;
-        break;
-      }
+      moves.push({ row: r, col: c, steps: s });
     }
-    if (ok) moves.push({ row: r, col: c });
   }
   return moves;
 }
