@@ -50,7 +50,7 @@ export function LoadingScreen() {
           Hourglass Duel
         </h1>
         <div className="h-2 w-48 overflow-hidden rounded-full bg-secondary">
-          <div className="h-full w-1/3 animate-[loading-bar_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
+          <div className="h-full w-1/3 animate-loading-bar rounded-full bg-primary" />
         </div>
         <p className="text-xs uppercase tracking-widest text-muted-foreground">Loading…</p>
       </div>
