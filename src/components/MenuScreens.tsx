@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
+  BadgePercent,
   Bot,
   Dices,
   Globe,
@@ -22,6 +23,7 @@ import {
   type Settings,
 } from "@/hooks/use-settings";
 import { PIECES_PER_PLAYER } from "@/lib/game";
+import { areAdsRemoved } from "@/lib/ads";
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
@@ -123,7 +125,7 @@ export function HomeScreen({
 
   return (
     <Shell>
-      <div className="flex flex-1 flex-col justify-center gap-6 animate-fade-in">
+      <div className="flex flex-1 flex-col justify-center gap-6 pb-2 animate-fade-in">
         <div className="text-center">
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl border-2 border-primary bg-card">
             <Dices className="h-8 w-8 text-primary" />
@@ -171,6 +173,12 @@ export function HomeScreen({
           />
         </div>
       </div>
+
+      {!areAdsRemoved() && (
+        <div className="mx-auto flex h-[50px] w-[320px] max-w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
+          Ad Banner Placeholder
+        </div>
+      )}
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-6 animate-fade-in">
@@ -263,6 +271,24 @@ export function SettingsScreen({
           value={settings.sfx}
           onChange={(v) => onChange({ sfx: v })}
         />
+
+        <div
+          aria-disabled
+          className="flex min-h-[60px] w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 opacity-70"
+        >
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary">
+            <BadgePercent className="h-5 w-5" />
+          </span>
+          <span className="flex-1 text-left">
+            <span className="block text-sm font-semibold">Remove Ads</span>
+            <span className="block text-xs text-muted-foreground">
+              One-time purchase — hides all ads
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full border border-border bg-secondary px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Coming soon
+          </span>
+        </div>
 
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">

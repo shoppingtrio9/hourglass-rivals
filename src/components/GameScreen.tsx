@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Gift } from "lucide-react";
+import {
+  areAdsRemoved,
+  recordMatchCompleted,
+  showInterstitialAd,
+  showRewardedAd,
+} from "@/lib/ads";
 import {
   MAX_COLS,
   ROWS,
@@ -45,6 +51,9 @@ export function GameScreen({ mode, settings, onExit }: Props) {
   const [reached, setReached] = useState<Record<Player, number>>({ 1: 0, 2: 0 });
   const [winner, setWinner] = useState<Player | null>(null);
   const [thinking, setThinking] = useState(false);
+  const [adPlaying, setAdPlaying] = useState<"rewarded" | "interstitial" | null>(null);
+  const [extraRollUsed, setExtraRollUsed] = useState(false);
+  const [pendingExtraRoll, setPendingExtraRoll] = useState(false);
 
   const sfx = useCallback(
     (name: SfxName) => {
@@ -78,7 +87,16 @@ export function GameScreen({ mode, settings, onExit }: Props) {
     setVanishing(null);
     setReached({ 1: 0, 2: 0 });
     setWinner(null);
+    setAdPlaying(null);
+    setExtraRollUsed(false);
+    setPendingExtraRoll(false);
   }, []);
+
+  // Extra-roll perk is per-turn: re-arm it whenever the turn changes.
+  useEffect(() => {
+    setExtraRollUsed(false);
+    setPendingExtraRoll(false);
+  }, [turn]);
 
   const roll = useCallback(() => {
     if (rolling || dice !== null || winner) return;
@@ -156,14 +174,51 @@ export function GameScreen({ mode, settings, onExit }: Props) {
             wins1: prog.wins1 + (piece.player === 1 ? 1 : 0),
             wins2: prog.wins2 + (piece.player === 2 ? 1 : 0),
           });
+          // Placeholder interstitial: after every 2nd completed match.
+          if (!areAdsRemoved() && recordMatchCompleted()) {
+            window.setTimeout(() => {
+              setAdPlaying("interstitial");
+              showInterstitialAd(() => setAdPlaying(null));
+            }, 900);
+          }
           return;
         }
       }
 
-      if (remaining <= 0 || !hasMoveWith(boardAfter, piece.player, remaining)) endTurn();
+      if (remaining <= 0 || !hasMoveWith(boardAfter, piece.player, remaining)) {
+        // A rewarded extra roll lets the human keep the turn and roll again.
+        if (pendingExtraRoll && mode === "bot" && piece.player === 1) {
+          setPendingExtraRoll(false);
+          setDice(null);
+          setPoints(0);
+        } else {
+          endTurn();
+        }
+      }
     },
-    [pieces, points, reached, sfx, endTurn],
+    [pieces, points, reached, sfx, endTurn, pendingExtraRoll, mode],
   );
+
+  // Rewarded ad placeholder: grants one additional roll on the human's turn
+  // (bot matches only, once per turn). Swap internals for AdMob later.
+  const watchRewarded = useCallback(() => {
+    if (adPlaying || extraRollUsed || winner || botTurn || rolling || dice === null) return;
+    setExtraRollUsed(true);
+    setAdPlaying("rewarded");
+    showRewardedAd(
+      () => {
+        if (points > 0) {
+          // Mid-turn: keep remaining points, roll again once they're spent.
+          setPendingExtraRoll(true);
+        } else {
+          setDice(null);
+          setPoints(0);
+          setSelectedId(null);
+        }
+      },
+      () => setAdPlaying(null),
+    );
+  }, [adPlaying, extraRollUsed, winner, botTurn, rolling, dice, points]);
 
   // Bot driver: rolls, then spends its points one move at a time.
   useEffect(() => {
@@ -363,6 +418,17 @@ export function GameScreen({ mode, settings, onExit }: Props) {
             </span>
           </div>
         </div>
+        {mode === "bot" && !areAdsRemoved() && (
+          <button
+            type="button"
+            onClick={watchRewarded}
+            disabled={adPlaying !== null || extraRollUsed || !!winner || botTurn || rolling || dice === null}
+            className="flex h-11 min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-primary/50 bg-primary/10 text-sm font-semibold text-primary active:scale-95 disabled:opacity-40"
+          >
+            <Gift className="h-4 w-4" />
+            {extraRollUsed ? "Extra Move Used" : "Watch Ad for Extra Move"}
+          </button>
+        )}
         <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
           <div
             className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-secondary font-display text-2xl ${
@@ -398,6 +464,20 @@ export function GameScreen({ mode, settings, onExit }: Props) {
           </button>
         </div>
       </footer>
+
+      {adPlaying && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-background/95 px-6 animate-fade-in">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="mt-4 font-display text-lg text-primary">Ad Playing…</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {adPlaying === "rewarded"
+                ? "Your extra move is on the way"
+                : "Back to the game in a moment"}
+            </p>
+          </div>
+        </div>
+      )}
 
       {winner && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/90 px-6 animate-fade-in">
