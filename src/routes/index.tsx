@@ -5,9 +5,12 @@ import {
   HelpScreen,
   HomeScreen,
   LoadingScreen,
+  ModeSelectScreen,
   SettingsScreen,
 } from "@/components/MenuScreens";
+import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -31,11 +34,12 @@ export const Route = createFileRoute("/")({
   component: App,
 });
 
-type Screen = "loading" | "home" | "settings" | "help" | "game";
+type Screen = "loading" | "home" | "modes" | "settings" | "help" | "game";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [mode, setMode] = useState<GameMode>("local");
+  const [rules, setRules] = useState<RuleSet>("race");
   const [gameKey, setGameKey] = useState(0);
   const { settings, update } = useSettings();
 
@@ -44,8 +48,13 @@ function App() {
     return () => window.clearTimeout(t);
   }, []);
 
-  const start = (m: GameMode) => {
+  const chooseMode = (m: GameMode) => {
     setMode(m);
+    setScreen("modes");
+  };
+
+  const start = (r: RuleSet) => {
+    setRules(r);
     setGameKey((k) => k + 1);
     setScreen("game");
   };
@@ -56,11 +65,20 @@ function App() {
       <SettingsScreen settings={settings} onChange={update} onBack={() => setScreen("home")} />
     );
   if (screen === "help") return <HelpScreen onBack={() => setScreen("home")} />;
+  if (screen === "modes")
+    return (
+      <ModeSelectScreen
+        heading={mode === "bot" ? "Play vs Bot" : "Play 1v1"}
+        onPick={start}
+        onBack={() => setScreen("home")}
+      />
+    );
   if (screen === "game")
     return (
       <GameScreen
         key={gameKey}
         mode={mode}
+        rules={rules}
         settings={settings}
         onExit={() => setScreen("home")}
       />
@@ -68,10 +86,11 @@ function App() {
 
   return (
     <HomeScreen
-      onPlayLocal={() => start("local")}
-      onPlayBot={() => start("bot")}
+      onPlayLocal={() => chooseMode("local")}
+      onPlayBot={() => chooseMode("bot")}
       onSettings={() => setScreen("settings")}
       onHelp={() => setScreen("help")}
     />
   );
+
 }

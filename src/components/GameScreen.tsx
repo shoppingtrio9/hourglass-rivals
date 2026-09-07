@@ -20,24 +20,30 @@ import {
   type Move,
   type Piece,
   type Player,
+  type RuleSet,
 } from "@/lib/game";
 import { chooseBotMove } from "@/lib/bot";
 import { playSfx, startMusic, stopMusic, type SfxName } from "@/lib/audio";
 import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings";
 
+
 export type GameMode = "local" | "bot";
 
 type Props = {
   mode: GameMode;
+  rules?: RuleSet;
   settings: Settings;
   onExit: () => void;
 };
 
-export function GameScreen({ mode, settings, onExit }: Props) {
+export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
+  const elimination = rules === "elimination";
+  const modeLabel = elimination ? "Elimination Mode" : "Race Mode";
   const label: Record<Player, string> = {
     1: mode === "bot" ? "You" : "Player 1",
     2: mode === "bot" ? "Bot" : "Player 2",
   };
+
 
   const [pieces, setPieces] = useState<Piece[]>(createPieces);
   const [turn, setTurn] = useState<Player>(1);
@@ -72,9 +78,10 @@ export function GameScreen({ mode, settings, onExit }: Props) {
   const botTurn = mode === "bot" && turn === 2;
 
   const moves = useMemo(
-    () => (selected && points > 0 ? validMoves(pieces, selected, points) : []),
-    [selected, points, pieces],
+    () => (selected && points > 0 ? validMoves(pieces, selected, points, rules) : []),
+    [selected, points, pieces, rules],
   );
+
 
   const reset = useCallback(() => {
     setPieces(createPieces());
@@ -112,7 +119,10 @@ export function GameScreen({ mode, settings, onExit }: Props) {
 
   const hasMoveWith = (list: Piece[], player: Player, pts: number) =>
     pts > 0 &&
-    list.some((p) => p.player === player && !p.home && validMoves(list, p, pts).length > 0);
+    list.some(
+      (p) => p.player === player && !p.home && validMoves(list, p, pts, rules).length > 0,
+    );
+
 
   const anyMoveAvailable = useMemo(
     () => (dice === null ? true : hasMoveWith(pieces, turn, points)),
@@ -129,23 +139,55 @@ export function GameScreen({ mode, settings, onExit }: Props) {
   const winnerRef = useRef<Player | null>(null);
   winnerRef.current = winner;
 
+  const finishMatch = useCallback(
+    (win: Player) => {
+      setWinner(win);
+      setDice(null);
+      setPoints(0);
+      sfx("win");
+      const prog = readProgress();
+      writeProgress({
+        games: prog.games + 1,
+        wins1: prog.wins1 + (win === 1 ? 1 : 0),
+        wins2: prog.wins2 + (win === 2 ? 1 : 0),
+      });
+      // Placeholder interstitial: after every 2nd completed match.
+      if (!areAdsRemoved() && recordMatchCompleted()) {
+        window.setTimeout(() => {
+          setAdPlaying("interstitial");
+          showInterstitialAd(() => setAdPlaying(null));
+        }, 900);
+      }
+    },
+    [sfx],
+  );
+
   const applyMove = useCallback(
     (piece: Piece, move: Move) => {
       const occupant = pieceAt(pieces, move.row, move.col);
       const victim = occupant && occupant.player !== piece.player ? occupant : null;
       if (victim) {
-        setCaptured(victim.id);
         sfx("capture");
-        window.setTimeout(() => setCaptured(null), 450);
+        if (elimination) {
+          // Permanent removal, same vanish effect as reaching the goal.
+          setVanishing(victim.id);
+          window.setTimeout(() => setVanishing(null), 550);
+        } else {
+          setCaptured(victim.id);
+          window.setTimeout(() => setCaptured(null), 450);
+        }
       } else {
         sfx("move");
       }
-      const reachedHome = isHomeSquare(piece.player, move.row);
-      const next = pieces.map((p) => {
-        if (p.id === piece.id) return { ...p, row: move.row, col: move.col };
-        if (victim && p.id === victim.id) return { ...p, row: p.startRow, col: p.startCol };
-        return p;
-      });
+      const reachedHome = !elimination && isHomeSquare(piece.player, move.row);
+      const next = pieces
+        .filter((p) => !(elimination && victim && p.id === victim.id))
+        .map((p) => {
+          if (p.id === piece.id) return { ...p, row: move.row, col: move.col };
+          if (!elimination && victim && p.id === victim.id)
+            return { ...p, row: p.startRow, col: p.startCol };
+          return p;
+        });
       setPieces(next);
       setMoveCount((m) => m + 1);
       const remaining = points - move.steps;
@@ -153,6 +195,15 @@ export function GameScreen({ mode, settings, onExit }: Props) {
       setSelectedId(null);
 
       let boardAfter = next;
+
+      if (elimination && victim) {
+        const left = next.filter((p) => p.player === victim.player).length;
+        if (left === 0) {
+          finishMatch(piece.player);
+          return;
+        }
+      }
+
       if (reachedHome) {
         sfx("goal");
         setVanishing(piece.id);
@@ -164,23 +215,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
         }, 550);
         boardAfter = next.filter((p) => p.id !== piece.id);
         if (newTotal === PIECES_PER_PLAYER) {
-          setWinner(piece.player);
-          setDice(null);
-          setPoints(0);
-          sfx("win");
-          const prog = readProgress();
-          writeProgress({
-            games: prog.games + 1,
-            wins1: prog.wins1 + (piece.player === 1 ? 1 : 0),
-            wins2: prog.wins2 + (piece.player === 2 ? 1 : 0),
-          });
-          // Placeholder interstitial: after every 2nd completed match.
-          if (!areAdsRemoved() && recordMatchCompleted()) {
-            window.setTimeout(() => {
-              setAdPlaying("interstitial");
-              showInterstitialAd(() => setAdPlaying(null));
-            }, 900);
-          }
+          finishMatch(piece.player);
           return;
         }
       }
@@ -196,8 +231,9 @@ export function GameScreen({ mode, settings, onExit }: Props) {
         }
       }
     },
-    [pieces, points, reached, sfx, endTurn, pendingExtraRoll, mode],
+    [pieces, points, reached, sfx, endTurn, pendingExtraRoll, mode, elimination, finishMatch],
   );
+
 
   // Rewarded ad placeholder: grants one additional roll on the human's turn
   // (bot matches only, once per turn). Swap internals for AdMob later.
@@ -231,7 +267,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
     if (points <= 0) return;
     setThinking(true);
     const t = window.setTimeout(() => {
-      const choice = chooseBotMove(pieces, 2, points);
+      const choice = chooseBotMove(pieces, 2, points, rules);
       if (!choice) {
         endTurn();
         setThinking(false);
@@ -247,7 +283,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
       setThinking(false);
     }, 700);
     return () => window.clearTimeout(t);
-  }, [botTurn, winner, rolling, dice, points, pieces, roll, applyMove, endTurn]);
+  }, [botTurn, winner, rolling, dice, points, pieces, roll, applyMove, endTurn, rules]);
 
   useEffect(() => {
     if (!botTurn) setThinking(false);
@@ -273,6 +309,9 @@ export function GameScreen({ mode, settings, onExit }: Props) {
 
   const p1Home = reached[1];
   const p2Home = reached[2];
+  const p1Alive = pieces.filter((p) => p.player === 1).length;
+  const p2Alive = pieces.filter((p) => p.player === 2).length;
+
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-background text-foreground">
@@ -297,7 +336,9 @@ export function GameScreen({ mode, settings, onExit }: Props) {
           }`}
         >
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Turn</p>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              Turn · {modeLabel}
+            </p>
             <p className="truncate font-display text-base">
               {label[turn]}
               {thinking && botTurn ? " · thinking…" : ""}
@@ -305,12 +346,15 @@ export function GameScreen({ mode, settings, onExit }: Props) {
           </div>
           <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>
-              <span className="text-p1-glow">{label[1]}</span> {p1Home}/{PIECES_PER_PLAYER}
+              <span className="text-p1-glow">{label[1]}</span>{" "}
+              {elimination ? `${p1Alive} left` : `${p1Home}/${PIECES_PER_PLAYER}`}
             </p>
             <p>
-              <span className="text-p2-glow">{label[2]}</span> {p2Home}/{PIECES_PER_PLAYER}
+              <span className="text-p2-glow">{label[2]}</span>{" "}
+              {elimination ? `${p2Alive} left` : `${p2Home}/${PIECES_PER_PLAYER}`}
             </p>
           </div>
+
         </div>
       </header>
 
@@ -359,7 +403,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
-                            isSafe(piece) ? "opacity-95 shadow-inner" : ""
+                            !elimination && isSafe(piece) ? "opacity-95 shadow-inner" : ""
                           } ${
                             captured === piece.id
                               ? "animate-capture-flash"
@@ -368,7 +412,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
                                 : "animate-pop"
                           }`}
                         >
-                          {isSafe(piece) && (
+                          {!elimination && isSafe(piece) && (
                             <span className="absolute inset-0 grid place-items-center text-[9px] text-foreground/70">
                               ✦
                             </span>
@@ -484,8 +528,11 @@ export function GameScreen({ mode, settings, onExit }: Props) {
           <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
             <p className="font-display text-2xl text-primary">{label[winner]} Wins!</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              All {PIECES_PER_PLAYER} pieces made it home in {moveCount} moves.
+              {elimination
+                ? `All of ${label[winner === 1 ? 2 : 1]}'s pieces were eliminated in ${moveCount} moves.`
+                : `All ${PIECES_PER_PLAYER} pieces made it home in ${moveCount} moves.`}
             </p>
+
             <button
               type="button"
               onClick={reset}

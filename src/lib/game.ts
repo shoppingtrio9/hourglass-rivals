@@ -70,11 +70,22 @@ const DIRS = [
 
 export type Move = { row: number; col: number; steps: number };
 
+/** Which rule set a match is played under. */
+export type RuleSet = "race" | "elimination";
+
 /**
  * All straight-line destinations reachable using between 1 and `maxSteps` points.
- * Paths must stay on-board, unobstructed, and never cross or land on a safe piece.
+ * Paths must stay on-board and unobstructed. Under the "race" rules a safe piece
+ * (one resting in its own home rows) also blocks movement and cannot be captured;
+ * under "elimination" rules safe zones are disabled entirely.
  */
-export function validMoves(pieces: Piece[], piece: Piece, maxSteps: number): Move[] {
+export function validMoves(
+  pieces: Piece[],
+  piece: Piece,
+  maxSteps: number,
+  rules: RuleSet = "race",
+): Move[] {
+  const safeMatters = rules === "race";
   const moves: Move[] = [];
   if (piece.home || maxSteps <= 0) return moves;
   for (const [dr, dc] of DIRS) {
@@ -86,7 +97,7 @@ export function validMoves(pieces: Piece[], piece: Piece, maxSteps: number): Mov
       if (!isPlayable(r, c)) break;
       const occupant = pieceAt(pieces, r, c);
       if (occupant) {
-        if (occupant.player === piece.player || isSafe(occupant)) break;
+        if (occupant.player === piece.player || (safeMatters && isSafe(occupant))) break;
         moves.push({ row: r, col: c, steps: s });
         break; // cannot continue past a piece
       }
@@ -95,6 +106,7 @@ export function validMoves(pieces: Piece[], piece: Piece, maxSteps: number): Mov
   }
   return moves;
 }
+
 
 export const isHomeSquare = (player: Player, row: number) =>
   targetRows(player).includes(row);
