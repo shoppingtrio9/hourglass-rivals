@@ -6,14 +6,15 @@ import {
   Dices,
   Flag,
   Globe,
-
   HelpCircle,
   Lock,
   Music,
   RotateCcw,
   Settings as SettingsIcon,
   Shield,
+  Skull,
   Swords,
+
   Trophy,
   Volume2,
 } from "lucide-react";
