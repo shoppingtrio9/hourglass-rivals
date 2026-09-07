@@ -5,9 +5,12 @@ import {
   HelpScreen,
   HomeScreen,
   LoadingScreen,
+  ModeSelectScreen,
   SettingsScreen,
 } from "@/components/MenuScreens";
+import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
