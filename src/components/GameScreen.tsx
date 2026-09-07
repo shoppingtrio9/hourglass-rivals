@@ -78,9 +78,10 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
   const botTurn = mode === "bot" && turn === 2;
 
   const moves = useMemo(
-    () => (selected && points > 0 ? validMoves(pieces, selected, points) : []),
-    [selected, points, pieces],
+    () => (selected && points > 0 ? validMoves(pieces, selected, points, rules) : []),
+    [selected, points, pieces, rules],
   );
+
 
   const reset = useCallback(() => {
     setPieces(createPieces());
@@ -118,7 +119,10 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
 
   const hasMoveWith = (list: Piece[], player: Player, pts: number) =>
     pts > 0 &&
-    list.some((p) => p.player === player && !p.home && validMoves(list, p, pts).length > 0);
+    list.some(
+      (p) => p.player === player && !p.home && validMoves(list, p, pts, rules).length > 0,
+    );
+
 
   const anyMoveAvailable = useMemo(
     () => (dice === null ? true : hasMoveWith(pieces, turn, points)),
