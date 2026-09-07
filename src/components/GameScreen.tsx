@@ -267,7 +267,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
     if (points <= 0) return;
     setThinking(true);
     const t = window.setTimeout(() => {
-      const choice = chooseBotMove(pieces, 2, points);
+      const choice = chooseBotMove(pieces, 2, points, rules);
       if (!choice) {
         endTurn();
         setThinking(false);
@@ -283,7 +283,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
       setThinking(false);
     }, 700);
     return () => window.clearTimeout(t);
-  }, [botTurn, winner, rolling, dice, points, pieces, roll, applyMove, endTurn]);
+  }, [botTurn, winner, rolling, dice, points, pieces, roll, applyMove, endTurn, rules]);
 
   useEffect(() => {
     if (!botTurn) setThinking(false);
@@ -333,7 +333,9 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
           }`}
         >
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">Turn</p>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              Turn · {modeLabel}
+            </p>
             <p className="truncate font-display text-base">
               {label[turn]}
               {thinking && botTurn ? " · thinking…" : ""}
@@ -341,12 +343,15 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
           </div>
           <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>
-              <span className="text-p1-glow">{label[1]}</span> {p1Home}/{PIECES_PER_PLAYER}
+              <span className="text-p1-glow">{label[1]}</span>{" "}
+              {elimination ? `${p1Alive} left` : `${p1Home}/${PIECES_PER_PLAYER}`}
             </p>
             <p>
-              <span className="text-p2-glow">{label[2]}</span> {p2Home}/{PIECES_PER_PLAYER}
+              <span className="text-p2-glow">{label[2]}</span>{" "}
+              {elimination ? `${p2Alive} left` : `${p2Home}/${PIECES_PER_PLAYER}`}
             </p>
           </div>
+
         </div>
       </header>
 
