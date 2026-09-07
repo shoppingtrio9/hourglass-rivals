@@ -309,6 +309,9 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
 
   const p1Home = reached[1];
   const p2Home = reached[2];
+  const p1Alive = pieces.filter((p) => p.player === 1).length;
+  const p2Alive = pieces.filter((p) => p.player === 2).length;
+
 
   return (
     <main className="flex min-h-[100dvh] flex-col bg-background text-foreground">
