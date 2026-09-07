@@ -4,7 +4,9 @@ import {
   BadgePercent,
   Bot,
   Dices,
+  Flag,
   Globe,
+
   HelpCircle,
   Lock,
   Music,
@@ -367,3 +369,55 @@ export function HelpScreen({ onBack }: { onBack: () => void }) {
     </Shell>
   );
 }
+
+export function ModeSelectScreen({
+  heading,
+  onPick,
+  onBack,
+}: {
+  heading: string;
+  onPick: (rules: "race" | "elimination") => void;
+  onBack: () => void;
+}) {
+  return (
+    <Shell>
+      <ScreenHeader title={heading} onBack={onBack} />
+      <div className="flex flex-1 flex-col justify-center gap-4 pb-6 animate-fade-in">
+        <p className="text-center text-xs text-muted-foreground">Choose how you want to play</p>
+        <button
+          type="button"
+          onClick={() => onPick("race")}
+          className="rounded-2xl border border-primary bg-primary p-4 text-left text-primary-foreground active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary-foreground/15">
+              <Flag className="h-5 w-5" />
+            </span>
+            <span className="font-display text-base">Race Mode</span>
+          </div>
+          <p className="mt-2 text-xs text-primary-foreground/80">
+            Safe home rows are on. Get all {PIECES_PER_PLAYER} of your pieces across to the
+            opponent's far rows to win.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => onPick("elimination")}
+          className="rounded-2xl border border-border bg-card p-4 text-left active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
+              <Skull className="h-5 w-5 text-primary" />
+            </span>
+            <span className="font-display text-base">Elimination Mode</span>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            No safe zones. Captured pieces are gone for good — lose all 8 and you lose the
+            match.
+          </p>
+        </button>
+      </div>
+    </Shell>
+  );
+}
+
