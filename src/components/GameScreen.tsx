@@ -20,24 +20,30 @@ import {
   type Move,
   type Piece,
   type Player,
+  type RuleSet,
 } from "@/lib/game";
 import { chooseBotMove } from "@/lib/bot";
 import { playSfx, startMusic, stopMusic, type SfxName } from "@/lib/audio";
 import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings";
 
+
 export type GameMode = "local" | "bot";
 
 type Props = {
   mode: GameMode;
+  rules?: RuleSet;
   settings: Settings;
   onExit: () => void;
 };
 
-export function GameScreen({ mode, settings, onExit }: Props) {
+export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
+  const elimination = rules === "elimination";
+  const modeLabel = elimination ? "Elimination Mode" : "Race Mode";
   const label: Record<Player, string> = {
     1: mode === "bot" ? "You" : "Player 1",
     2: mode === "bot" ? "Bot" : "Player 2",
   };
+
 
   const [pieces, setPieces] = useState<Piece[]>(createPieces);
   const [turn, setTurn] = useState<Player>(1);
