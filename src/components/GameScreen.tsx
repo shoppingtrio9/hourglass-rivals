@@ -403,7 +403,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
-                            isSafe(piece) ? "opacity-95 shadow-inner" : ""
+                            !elimination && isSafe(piece) ? "opacity-95 shadow-inner" : ""
                           } ${
                             captured === piece.id
                               ? "animate-capture-flash"
@@ -412,7 +412,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
                                 : "animate-pop"
                           }`}
                         >
-                          {isSafe(piece) && (
+                          {!elimination && isSafe(piece) && (
                             <span className="absolute inset-0 grid place-items-center text-[9px] text-foreground/70">
                               ✦
                             </span>
@@ -528,8 +528,11 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
           <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
             <p className="font-display text-2xl text-primary">{label[winner]} Wins!</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              All {PIECES_PER_PLAYER} pieces made it home in {moveCount} moves.
+              {elimination
+                ? `All of ${label[winner === 1 ? 2 : 1]}'s pieces were eliminated in ${moveCount} moves.`
+                : `All ${PIECES_PER_PLAYER} pieces made it home in ${moveCount} moves.`}
             </p>
+
             <button
               type="button"
               onClick={reset}
