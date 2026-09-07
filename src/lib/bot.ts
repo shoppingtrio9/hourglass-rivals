@@ -7,6 +7,7 @@ import {
   type Move,
   type Piece,
   type Player,
+  type RuleSet,
 } from "@/lib/game";
 
 const MAX_DICE = 3;
@@ -20,12 +21,33 @@ const rowDistance = (player: Player, row: number) => {
 };
 
 /** Can any enemy piece reach (row, col) within MAX_DICE points on this board? */
-function isThreatened(board: Piece[], player: Player, row: number, col: number) {
+function isThreatened(
+  board: Piece[],
+  player: Player,
+  row: number,
+  col: number,
+  rules: RuleSet,
+) {
   const enemy = opponentOf(player);
   return board.some((p) => {
     if (p.player !== enemy || p.home) return false;
-    return validMoves(board, p, MAX_DICE).some((m) => m.row === row && m.col === col);
+    return validMoves(board, p, MAX_DICE, rules).some((m) => m.row === row && m.col === col);
   });
+}
+
+/** How many enemy pieces this piece could capture next turn from (row, col). */
+function captureChances(
+  board: Piece[],
+  piece: Piece,
+  row: number,
+  col: number,
+  rules: RuleSet,
+) {
+  const moved = { ...piece, row, col };
+  return validMoves(board, moved, MAX_DICE, rules).filter((m) => {
+    const victim = pieceAt(board, m.row, m.col);
+    return !!victim && victim.player !== piece.player;
+  }).length;
 }
 
 export type BotChoice = { pieceId: string; move: Move };
@@ -39,14 +61,18 @@ export function chooseBotMove(
   board: Piece[],
   player: Player,
   points: number,
+  rules: RuleSet = "race",
 ): BotChoice | null {
+  const elimination = rules === "elimination";
   let best: { score: number; choice: BotChoice } | null = null;
 
   for (const piece of board) {
     if (piece.player !== player || piece.home) continue;
-    const exposedNow = !isSafe(piece) && isThreatened(board, player, piece.row, piece.col);
+    const exposedNow =
+      (elimination || !isSafe(piece)) &&
+      isThreatened(board, player, piece.row, piece.col, rules);
 
-    for (const move of validMoves(board, piece, points)) {
+    for (const move of validMoves(board, piece, points, rules)) {
       const victim = pieceAt(board, move.row, move.col);
       const after = board
         .filter((p) => !(victim && p.id === victim.id))
@@ -55,21 +81,34 @@ export function chooseBotMove(
       let score = 0;
 
       if (victim && victim.player !== player) {
-        // Capturing is the strongest single play; value sending back a runner.
-        score += 120 + (rowDistance(victim.player, victim.startRow) - rowDistance(victim.player, victim.row)) * 8;
+        if (elimination) {
+          // Captures are permanent here — by far the most valuable play.
+          score += 400;
+        } else {
+          score +=
+            120 +
+            (rowDistance(victim.player, victim.startRow) -
+              rowDistance(victim.player, victim.row)) *
+              8;
+        }
       }
 
-      if (isHomeSquare(player, move.row)) score += 200;
-
-      // Advance toward the opponent's rows.
-      score += (rowDistance(player, piece.row) - rowDistance(player, move.row)) * 14;
-
-      // Safety.
-      const landsSafe = isSafe({ ...piece, row: move.row });
+      const landsSafe = !elimination && isSafe({ ...piece, row: move.row });
       const landsThreatened =
-        !landsSafe && isThreatened(after, player, move.row, move.col);
-      if (landsThreatened) score -= 55;
-      if (exposedNow && !landsThreatened) score += 45;
+        !landsSafe && isThreatened(after, player, move.row, move.col, rules);
+
+      if (elimination) {
+        // No goal to race toward: value threat avoidance and future captures.
+        if (landsThreatened) score -= 120;
+        if (exposedNow && !landsThreatened) score += 110;
+        score += captureChances(after, { ...piece, row: move.row, col: move.col }, move.row, move.col, rules) * 22;
+      } else {
+        if (isHomeSquare(player, move.row)) score += 200;
+        // Advance toward the opponent's rows.
+        score += (rowDistance(player, piece.row) - rowDistance(player, move.row)) * 14;
+        if (landsThreatened) score -= 55;
+        if (exposedNow && !landsThreatened) score += 45;
+      }
 
       // Spend points efficiently so several pieces can act in one turn.
       score -= (move.steps - 1) * 4;
