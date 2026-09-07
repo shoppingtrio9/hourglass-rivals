@@ -129,23 +129,55 @@ export function GameScreen({ mode, settings, onExit }: Props) {
   const winnerRef = useRef<Player | null>(null);
   winnerRef.current = winner;
 
+  const finishMatch = useCallback(
+    (win: Player) => {
+      setWinner(win);
+      setDice(null);
+      setPoints(0);
+      sfx("win");
+      const prog = readProgress();
+      writeProgress({
+        games: prog.games + 1,
+        wins1: prog.wins1 + (win === 1 ? 1 : 0),
+        wins2: prog.wins2 + (win === 2 ? 1 : 0),
+      });
+      // Placeholder interstitial: after every 2nd completed match.
+      if (!areAdsRemoved() && recordMatchCompleted()) {
+        window.setTimeout(() => {
+          setAdPlaying("interstitial");
+          showInterstitialAd(() => setAdPlaying(null));
+        }, 900);
+      }
+    },
+    [sfx],
+  );
+
   const applyMove = useCallback(
     (piece: Piece, move: Move) => {
       const occupant = pieceAt(pieces, move.row, move.col);
       const victim = occupant && occupant.player !== piece.player ? occupant : null;
       if (victim) {
-        setCaptured(victim.id);
         sfx("capture");
-        window.setTimeout(() => setCaptured(null), 450);
+        if (elimination) {
+          // Permanent removal, same vanish effect as reaching the goal.
+          setVanishing(victim.id);
+          window.setTimeout(() => setVanishing(null), 550);
+        } else {
+          setCaptured(victim.id);
+          window.setTimeout(() => setCaptured(null), 450);
+        }
       } else {
         sfx("move");
       }
-      const reachedHome = isHomeSquare(piece.player, move.row);
-      const next = pieces.map((p) => {
-        if (p.id === piece.id) return { ...p, row: move.row, col: move.col };
-        if (victim && p.id === victim.id) return { ...p, row: p.startRow, col: p.startCol };
-        return p;
-      });
+      const reachedHome = !elimination && isHomeSquare(piece.player, move.row);
+      const next = pieces
+        .filter((p) => !(elimination && victim && p.id === victim.id))
+        .map((p) => {
+          if (p.id === piece.id) return { ...p, row: move.row, col: move.col };
+          if (!elimination && victim && p.id === victim.id)
+            return { ...p, row: p.startRow, col: p.startCol };
+          return p;
+        });
       setPieces(next);
       setMoveCount((m) => m + 1);
       const remaining = points - move.steps;
@@ -153,6 +185,15 @@ export function GameScreen({ mode, settings, onExit }: Props) {
       setSelectedId(null);
 
       let boardAfter = next;
+
+      if (elimination && victim) {
+        const left = next.filter((p) => p.player === victim.player).length;
+        if (left === 0) {
+          finishMatch(piece.player);
+          return;
+        }
+      }
+
       if (reachedHome) {
         sfx("goal");
         setVanishing(piece.id);
@@ -164,23 +205,7 @@ export function GameScreen({ mode, settings, onExit }: Props) {
         }, 550);
         boardAfter = next.filter((p) => p.id !== piece.id);
         if (newTotal === PIECES_PER_PLAYER) {
-          setWinner(piece.player);
-          setDice(null);
-          setPoints(0);
-          sfx("win");
-          const prog = readProgress();
-          writeProgress({
-            games: prog.games + 1,
-            wins1: prog.wins1 + (piece.player === 1 ? 1 : 0),
-            wins2: prog.wins2 + (piece.player === 2 ? 1 : 0),
-          });
-          // Placeholder interstitial: after every 2nd completed match.
-          if (!areAdsRemoved() && recordMatchCompleted()) {
-            window.setTimeout(() => {
-              setAdPlaying("interstitial");
-              showInterstitialAd(() => setAdPlaying(null));
-            }, 900);
-          }
+          finishMatch(piece.player);
           return;
         }
       }
@@ -196,8 +221,9 @@ export function GameScreen({ mode, settings, onExit }: Props) {
         }
       }
     },
-    [pieces, points, reached, sfx, endTurn, pendingExtraRoll, mode],
+    [pieces, points, reached, sfx, endTurn, pendingExtraRoll, mode, elimination, finishMatch],
   );
+
 
   // Rewarded ad placeholder: grants one additional roll on the human's turn
   // (bot matches only, once per turn). Swap internals for AdMob later.
