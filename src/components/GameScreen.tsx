@@ -314,8 +314,8 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
 
 
   return (
-    <main className="flex min-h-[100dvh] flex-col bg-background text-foreground">
-      <header className="px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+    <main className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <header className="game-header shrink-0 px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -331,7 +331,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
           <span className="h-11 w-11" />
         </div>
         <div
-          className={`mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+          className={`game-turn-panel mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
             turn === 1 ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
           }`}
         >
@@ -358,12 +358,10 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         </div>
       </header>
 
-      <section className="flex flex-1 items-center justify-center px-2 py-3">
-        <div
-          className="rounded-3xl bg-board p-2 shadow-lg"
-          style={{ width: "min(100%, 380px, calc((100dvh - 340px) * 6 / 7))" }}
-        >
-          {Array.from({ length: ROWS }, (_, row) => {
+      <section className="game-board-area flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2">
+        <div className="game-board shrink-0 rounded-3xl bg-board p-2 shadow-lg">
+          {Array.from({ length: ROWS }, (_, visualRow) => {
+            const row = mode === "bot" ? ROWS - 1 - visualRow : visualRow;
             const off = rowOffset(row);
             return (
               <div
@@ -433,7 +431,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         </div>
       </section>
 
-      <footer className="sticky bottom-0 space-y-3 border-t border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+      <footer className="game-footer shrink-0 space-y-3 border-t border-border bg-card px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>Moves: {moveCount}</span>
           <span>
