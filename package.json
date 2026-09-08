@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "build:mobile": "vite build && rm -rf mobile-www && cp -r dist/client mobile-www"
   },
   "overrides": {
     "rolldown": "1.2.1"
