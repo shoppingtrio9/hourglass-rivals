@@ -177,11 +177,6 @@ export function HomeScreen({
         </div>
       </div>
 
-      {!areAdsRemoved() && (
-        <div className="mx-auto flex h-[50px] w-[320px] max-w-full shrink-0 items-center justify-center rounded-lg border border-dashed border-border bg-secondary/50 text-[10px] uppercase tracking-widest text-muted-foreground">
-          Ad Banner Placeholder
-        </div>
-      )}
 
       {toast && (
         <div className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex justify-center px-6 animate-fade-in">
@@ -421,4 +416,5 @@ export function ModeSelectScreen({
     </Shell>
   );
 }
+
 

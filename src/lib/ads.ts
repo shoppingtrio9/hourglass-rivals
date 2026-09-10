@@ -1,11 +1,20 @@
-// Placeholder ad layer.
-// These functions simulate ad behavior for now (timed overlays + console logs).
-// Later, swap the internals for the real Google AdMob SDK during Capacitor packaging —
-// the call sites and callback shapes stay the same.
+import { AdMob, BannerAdPosition, BannerAdSize } from '@capacitor-community/admob';
+
+// Real AdMob ad unit IDs
+const REWARDED_AD_ID = 'ca-app-pub-3352766356702846/6371562061';
+const INTERSTITIAL_AD_ID = 'ca-app-pub-3352766356702846/5873220267';
+const BANNER_AD_ID = 'ca-app-pub-3352766356702846/9017906706';
+
+let admobInitialized = false;
+
+export async function initAds() {
+  if (admobInitialized) return;
+  await AdMob.initialize();
+  admobInitialized = true;
+}
 
 let sessionMatchesCompleted = 0;
 
-/** Increment the session match counter. Returns true when an interstitial should show (every 2nd match). */
 export function recordMatchCompleted(): boolean {
   sessionMatchesCompleted += 1;
   return sessionMatchesCompleted % 2 === 0;
@@ -15,32 +24,51 @@ export function getSessionMatchesCompleted(): number {
   return sessionMatchesCompleted;
 }
 
-/**
- * Simulates a rewarded ad: "plays" for 2s, then grants the reward.
- * AdMob equivalent: RewardedAd.load + show, onUserEarnedReward -> onReward.
- */
-export function showRewardedAd(onReward: () => void, onDone?: () => void) {
-  console.log("[Ads] Rewarded ad playing (placeholder)…");
-  window.setTimeout(() => {
-    console.log("[Ads] Rewarded ad finished — reward granted");
-    onReward();
+export async function showRewardedAd(onReward: () => void, onDone?: () => void) {
+  try {
+    await AdMob.prepareRewardVideoAd({ adId: REWARDED_AD_ID });
+    const result = await AdMob.showRewardVideoAd();
+    if (result) {
+      onReward();
+    }
+  } catch (e) {
+    console.log('[Ads] Rewarded ad failed', e);
+  } finally {
     onDone?.();
-  }, 2000);
+  }
 }
 
-/**
- * Simulates an interstitial ad: full-screen for 2s, then closes.
- * AdMob equivalent: InterstitialAd.load + show.
- */
-export function showInterstitialAd(onDone?: () => void) {
-  console.log("[Ads] Interstitial ad playing (placeholder)…");
-  window.setTimeout(() => {
-    console.log("[Ads] Interstitial ad closed");
+export async function showInterstitialAd(onDone?: () => void) {
+  try {
+    await AdMob.prepareInterstitial({ adId: INTERSTITIAL_AD_ID });
+    await AdMob.showInterstitial();
+  } catch (e) {
+    console.log('[Ads] Interstitial ad failed', e);
+  } finally {
     onDone?.();
-  }, 2000);
+  }
 }
 
-/** Whether ads are removed (future in-app purchase). Always false until IAP ships. */
+export async function showBannerAd() {
+  try {
+    await AdMob.showBanner({
+      adId: BANNER_AD_ID,
+      adSize: BannerAdSize.BANNER,
+      position: BannerAdPosition.BOTTOM_CENTER,
+    });
+  } catch (e) {
+    console.log('[Ads] Banner ad failed', e);
+  }
+}
+
+export async function hideBannerAd() {
+  try {
+    await AdMob.hideBanner();
+  } catch (e) {
+    console.log('[Ads] Hide banner failed', e);
+  }
+}
+
 export function areAdsRemoved(): boolean {
   return false;
 }

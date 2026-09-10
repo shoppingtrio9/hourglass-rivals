@@ -10,6 +10,7 @@ import {
 } from "@/components/MenuScreens";
 import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
+import { initAds, showBannerAd, hideBannerAd } from "@/lib/ads";
 
 
 export const Route = createFileRoute("/")({
@@ -44,9 +45,21 @@ function App() {
   const { settings, update } = useSettings();
 
   useEffect(() => {
+    initAds();
+  }, []);
+
+  useEffect(() => {
     const t = window.setTimeout(() => setScreen("home"), 1600);
     return () => window.clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (screen === "home") {
+      showBannerAd();
+    } else {
+      hideBannerAd();
+    }
+  }, [screen]);
 
   const chooseMode = (m: GameMode) => {
     setMode(m);
