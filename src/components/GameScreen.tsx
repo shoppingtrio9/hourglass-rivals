@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Gift } from "lucide-react";
+import { ArrowLeft, Gift, Coins } from "lucide-react";
 import {
   areAdsRemoved,
   recordMatchCompleted,
@@ -25,6 +25,10 @@ import {
 import { chooseBotMove } from "@/lib/bot";
 import { playSfx, startMusic, stopMusic, type SfxName } from "@/lib/audio";
 import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings";
+import { payoutWin, rollLuckyReward, type LuckyReward } from "@/lib/coins";
+import { App } from "@capacitor/app";
+import { getSelectedSkin, getSkinById } from "@/lib/skins";
+import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
 
 
 export type GameMode = "local" | "bot";
@@ -33,14 +37,17 @@ type Props = {
   mode: GameMode;
   rules?: RuleSet;
   settings: Settings;
+  stake?: number;
+  luckyShot?: boolean;
   onExit: () => void;
 };
 
-export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
+export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, onExit }: Props) {
   const elimination = rules === "elimination";
+  const skin = getSkinById(getSelectedSkin());
   const modeLabel = elimination ? "Elimination Mode" : "Race Mode";
   const label: Record<Player, string> = {
-    1: mode === "bot" ? "You" : "Player 1",
+    1: getProfileName(),
     2: mode === "bot" ? "Bot" : "Player 2",
   };
 
@@ -60,6 +67,8 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
   const [adPlaying, setAdPlaying] = useState<"rewarded" | "interstitial" | null>(null);
   const [extraRollUsed, setExtraRollUsed] = useState(false);
   const [pendingExtraRoll, setPendingExtraRoll] = useState(false);
+  const [luckyReward, setLuckyReward] = useState<LuckyReward | null>(null);
+  const [confirmExit, setConfirmExit] = useState(false);
 
   const sfx = useCallback(
     (name: SfxName) => {
@@ -73,6 +82,15 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
     else stopMusic();
     return () => stopMusic();
   }, [settings.music]);
+
+  useEffect(() => {
+    const listener = App.addListener("backButton", () => {
+      setConfirmExit(true);
+    });
+    return () => {
+      listener.then((l) => l.remove());
+    };
+  }, []);
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
   const botTurn = mode === "bot" && turn === 2;
@@ -151,6 +169,22 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         wins1: prog.wins1 + (win === 1 ? 1 : 0),
         wins2: prog.wins2 + (win === 2 ? 1 : 0),
       });
+      let reward: LuckyReward | null = null;
+      if (mode === "bot" && luckyShot && win === 1) {
+        reward = rollLuckyReward();
+        setLuckyReward(reward);
+      } else if (mode === "bot" && stake && win === 1) {
+        payoutWin(stake);
+      }
+      recordMatchResult(win === 1);
+      addMatchRecord({
+        date: new Date().toISOString(),
+        mode,
+        rules,
+        result: win === 1 ? "win" : "loss",
+        stake,
+        payout: reward?.type === "coins" ? reward.amount : stake && win === 1 ? stake * 2 : undefined,
+      });
       // Placeholder interstitial: after every 2nd completed match.
       if (!areAdsRemoved() && recordMatchCompleted()) {
         window.setTimeout(() => {
@@ -159,7 +193,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         }, 900);
       }
     },
-    [sfx],
+    [sfx, mode, stake, rules, luckyShot],
   );
 
   const applyMove = useCallback(
@@ -319,7 +353,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onExit}
+            onClick={() => setConfirmExit(true)}
             aria-label="Back to menu"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-secondary active:scale-95"
           >
@@ -330,6 +364,18 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
           </h1>
           <span className="h-11 w-11" />
         </div>
+        {mode === "bot" && luckyShot && (
+          <div className="mt-2 mx-auto flex w-fit items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-400/10 px-3 py-1 text-xs font-semibold text-sky-400">
+            <Coins className="h-3.5 w-3.5" />
+            Lucky Match
+          </div>
+        )}
+        {mode === "bot" && !luckyShot && stake && (
+          <div className="mt-2 mx-auto flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            <Coins className="h-3.5 w-3.5" />
+            {stake.toLocaleString()} Coin Match
+          </div>
+        )}
         <div
           className={`game-turn-panel mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
             turn === 1 ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
@@ -396,6 +442,7 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
                       )}
                       {piece && (
                         <span
+                          style={piece.player === 1 && skin.color ? { backgroundColor: skin.color, borderColor: skin.glow } : undefined}
                           className={`absolute inset-[10%] rounded-full border-2 ${
                             piece.player === 1
                               ? "border-p1-glow bg-p1"
@@ -488,23 +535,14 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
             Roll Dice
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={endTurn}
-            disabled={dice === null || !!winner || botTurn}
-            className="h-12 min-h-[44px] rounded-xl border border-border bg-secondary text-sm font-semibold text-secondary-foreground active:scale-95 disabled:opacity-40"
-          >
-            {anyMoveAvailable ? "Skip Turn" : "No Moves — Skip"}
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            className="h-12 min-h-[44px] rounded-xl border border-destructive/60 bg-destructive/15 text-sm font-semibold text-foreground active:scale-95"
-          >
-            Reset Game
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={endTurn}
+          disabled={dice === null || !!winner || botTurn}
+          className="h-12 min-h-[44px] w-full rounded-xl border border-border bg-secondary text-sm font-semibold text-secondary-foreground active:scale-95 disabled:opacity-40"
+        >
+          {anyMoveAvailable ? "Skip Turn" : "No Moves — Skip"}
+        </button>
       </footer>
 
       {adPlaying && (
@@ -521,6 +559,30 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
         </div>
       )}
 
+      {confirmExit && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-background/90 px-6 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
+            <p className="font-display text-lg text-primary">Exit Match?</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your progress in this match will be lost.
+            </p>
+            <button
+              type="button"
+              onClick={onExit}
+              className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+            >
+              Exit
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmExit(false)}
+              className="mt-3 h-12 w-full rounded-2xl border border-border bg-secondary text-sm font-semibold active:scale-95"
+            >
+              Keep Playing
+            </button>
+          </div>
+        </div>
+      )}
       {winner && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/90 px-6 animate-fade-in">
           <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
@@ -530,7 +592,24 @@ export function GameScreen({ mode, rules = "race", settings, onExit }: Props) {
                 ? `All of ${label[winner === 1 ? 2 : 1]}'s pieces were eliminated in ${moveCount} moves.`
                 : `All ${PIECES_PER_PLAYER} pieces made it home in ${moveCount} moves.`}
             </p>
-
+            {mode === "bot" && luckyShot && (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold">
+                <Coins className="h-4 w-4 text-primary" />
+                {winner === 1
+                  ? luckyReward
+                    ? `You won ${luckyReward.amount.toLocaleString()} ${luckyReward.type}!`
+                    : null
+                  : "No loss — try again anytime!"}
+              </p>
+            )}
+            {mode === "bot" && !luckyShot && stake && (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold">
+                <Coins className="h-4 w-4 text-primary" />
+                {winner === 1
+                  ? `You won ${(stake * 2).toLocaleString()} coins!`
+                  : `The bot took your ${stake.toLocaleString()} coins.`}
+              </p>
+            )}
             <button
               type="button"
               onClick={reset}

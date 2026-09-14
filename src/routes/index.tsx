@@ -7,10 +7,18 @@ import {
   LoadingScreen,
   ModeSelectScreen,
   SettingsScreen,
+  StakeSelectScreen,
+  CoinsScreen,
+  GemsScreen,
+  EquipmentScreen,
+  TrophiesScreen,
+  ProfileScreen,
+  OfflineModeScreen,
 } from "@/components/MenuScreens";
 import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
 import { initAds, showBannerAd, hideBannerAd } from "@/lib/ads";
+import { getCoins, getGems, placeStake } from "@/lib/coins";
 
 
 export const Route = createFileRoute("/")({
@@ -35,17 +43,36 @@ export const Route = createFileRoute("/")({
   component: App,
 });
 
-type Screen = "loading" | "home" | "modes" | "settings" | "help" | "game";
+type Screen =
+  | "loading"
+  | "home"
+  | "offline"
+  | "modes"
+  | "stake"
+  | "coins"
+  | "gems"
+  | "equipment"
+  | "trophies"
+  | "profile"
+  | "settings"
+  | "help"
+  | "game";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [mode, setMode] = useState<GameMode>("local");
   const [rules, setRules] = useState<RuleSet>("race");
   const [gameKey, setGameKey] = useState(0);
+  const [coins, setCoins] = useState(0);
+  const [gems, setGems] = useState(0);
+  const [stake, setStake] = useState<number | undefined>(undefined);
+  const [luckyShot, setLuckyShot] = useState(false);
   const { settings, update } = useSettings();
 
   useEffect(() => {
     initAds();
+    setCoins(getCoins());
+    setGems(getGems());
   }, []);
 
   useEffect(() => {
@@ -55,19 +82,39 @@ function App() {
 
   useEffect(() => {
     if (screen === "home") {
+      setCoins(getCoins());
+      setGems(getGems());
       showBannerAd();
     } else {
       hideBannerAd();
     }
   }, [screen]);
 
-  const chooseMode = (m: GameMode) => {
-    setMode(m);
-    setScreen("modes");
+  const pickRules = (r: RuleSet) => {
+    setRules(r);
+    setLuckyShot(false);
+    if (mode === "bot") {
+      setScreen("stake");
+    } else {
+      setStake(undefined);
+      setGameKey((k) => k + 1);
+      setScreen("game");
+    }
   };
 
-  const start = (r: RuleSet) => {
-    setRules(r);
+  const pickStake = (amount: number) => {
+    if (!placeStake(amount)) return;
+    setCoins(getCoins());
+    setStake(amount);
+    setGameKey((k) => k + 1);
+    setScreen("game");
+  };
+
+  const startLuckyShot = () => {
+    setMode("bot");
+    setRules("elimination");
+    setStake(undefined);
+    setLuckyShot(true);
     setGameKey((k) => k + 1);
     setScreen("game");
   };
@@ -75,16 +122,54 @@ function App() {
   if (screen === "loading") return <LoadingScreen />;
   if (screen === "settings")
     return (
-      <SettingsScreen settings={settings} onChange={update} onBack={() => setScreen("home")} />
+      <SettingsScreen
+        settings={settings}
+        onChange={update}
+        onHelp={() => setScreen("help")}
+        onBack={() => setScreen("home")}
+      />
     );
-  if (screen === "help") return <HelpScreen onBack={() => setScreen("home")} />;
+  if (screen === "help") return <HelpScreen onBack={() => setScreen("settings")} />;
+  if (screen === "coins")
+    return (
+      <CoinsScreen coins={coins} onCoinsChange={setCoins} onBack={() => setScreen("home")} />
+    );
+  if (screen === "gems")
+    return <GemsScreen gems={gems} onGemsChange={setGems} onBack={() => setScreen("home")} />;
+  if (screen === "equipment")
+    return (
+      <EquipmentScreen coins={coins} onCoinsChange={setCoins} onBack={() => setScreen("home")} />
+    );
+  if (screen === "trophies") return <TrophiesScreen onBack={() => setScreen("home")} />;
+  if (screen === "profile")
+    return (
+      <ProfileScreen coins={coins} onCoinsChange={setCoins} onBack={() => setScreen("home")} />
+    );
+  if (screen === "offline")
+    return (
+      <OfflineModeScreen
+        onPlayLocal={() => {
+          setMode("local");
+          setScreen("modes");
+        }}
+        onPlayBot={() => {
+          setMode("bot");
+          setScreen("modes");
+        }}
+        onBack={() => setScreen("home")}
+      />
+    );
   if (screen === "modes")
     return (
       <ModeSelectScreen
         heading={mode === "bot" ? "Play vs Bot" : "Play 1v1"}
-        onPick={start}
-        onBack={() => setScreen("home")}
+        onPick={pickRules}
+        onBack={() => setScreen("offline")}
       />
+    );
+  if (screen === "stake")
+    return (
+      <StakeSelectScreen coins={coins} onPick={pickStake} onBack={() => setScreen("modes")} />
     );
   if (screen === "game")
     return (
@@ -93,16 +178,24 @@ function App() {
         mode={mode}
         rules={rules}
         settings={settings}
+        stake={stake}
+        luckyShot={luckyShot}
         onExit={() => setScreen("home")}
       />
     );
 
   return (
     <HomeScreen
-      onPlayLocal={() => chooseMode("local")}
-      onPlayBot={() => chooseMode("bot")}
+      onPlayOffline={() => setScreen("offline")}
+      onProfile={() => setScreen("profile")}
       onSettings={() => setScreen("settings")}
-      onHelp={() => setScreen("help")}
+      onEquipment={() => setScreen("equipment")}
+      onTrophies={() => setScreen("trophies")}
+      onCoinsClick={() => setScreen("coins")}
+      onGemsClick={() => setScreen("gems")}
+      onLuckyShot={startLuckyShot}
+      coins={coins}
+      gems={gems}
     />
   );
 
