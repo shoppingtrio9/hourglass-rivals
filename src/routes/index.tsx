@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { GameScreen, type GameMode } from "@/components/GameScreen";
+import { GameScreen, type GameMode, type OnlineSession } from "@/components/GameScreen";
 import {
   HelpScreen,
   HomeScreen,
@@ -14,11 +14,23 @@ import {
   TrophiesScreen,
   ProfileScreen,
   OfflineModeScreen,
+  OnlineModeScreen,
+  CreateRoomScreen,
+  JoinRoomScreen,
 } from "@/components/MenuScreens";
 import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
 import { initAds, showBannerAd, hideBannerAd } from "@/lib/ads";
 import { getCoins, getGems, placeStake } from "@/lib/coins";
+import { getProfileName } from "@/lib/profile";
+import {
+  createRoom,
+  joinRoom,
+  deleteRoom,
+  subscribeRoom,
+  generateRoomCode,
+  type JoinResult,
+} from "@/lib/online";
 
 
 export const Route = createFileRoute("/")({
@@ -47,6 +59,10 @@ type Screen =
   | "loading"
   | "home"
   | "offline"
+  | "online"
+  | "onlineRules"
+  | "createRoom"
+  | "joinRoom"
   | "modes"
   | "stake"
   | "coins"
