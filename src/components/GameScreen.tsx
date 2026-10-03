@@ -86,6 +86,10 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   const [pendingExtraRoll, setPendingExtraRoll] = useState(false);
   const [luckyReward, setLuckyReward] = useState<LuckyReward | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [opponentLeft, setOpponentLeft] = useState(false);
+
+  // When true, the next state change came from Firebase — don't echo it back.
+  const suppressPush = useRef(false);
 
   const sfx = useCallback(
     (name: SfxName) => {
@@ -111,6 +115,49 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
   const botTurn = mode === "bot" && turn === 2;
+  const myTurn = mode !== "online" || !online || turn === online.myPlayer;
+
+  // Online: listen to the room and mirror remote state locally.
+  useEffect(() => {
+    if (mode !== "online" || !online) return;
+    const unsub = subscribeRoom(online.code, (room) => {
+      if (!room) return;
+      if (room.status === "left" && room.leftBy !== online.myPlayer) {
+        setOpponentLeft(true);
+        return;
+      }
+      const s = room.state;
+      suppressPush.current = true;
+      setPieces(s.pieces);
+      setTurn(s.turn);
+      setDice(s.dice);
+      setPoints(s.points);
+      setMoveCount(s.moveCount);
+      setReached(s.reached);
+      setWinner(s.winner);
+      setSelectedId(null);
+    });
+    return unsub;
+  }, [mode, online]);
+
+  // Online: push every local state change to the room.
+  useEffect(() => {
+    if (mode !== "online" || !online) return;
+    if (suppressPush.current) {
+      suppressPush.current = false;
+      return;
+    }
+    const state: OnlineGameState = { pieces, turn, dice, points, moveCount, reached, winner };
+    if (winner) void markRoomFinished(online.code, state);
+    else void pushGameState(online.code, state);
+  }, [mode, online, pieces, turn, dice, points, moveCount, reached, winner]);
+
+  // Online: after the opponent leaves, return home shortly.
+  useEffect(() => {
+    if (!opponentLeft) return;
+    const t = window.setTimeout(onExit, 2500);
+    return () => window.clearTimeout(t);
+  }, [opponentLeft, onExit]);
 
   const moves = useMemo(
     () => (selected && points > 0 ? validMoves(pieces, selected, points, rules) : []),
