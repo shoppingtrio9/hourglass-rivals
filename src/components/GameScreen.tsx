@@ -188,7 +188,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   }, [turn]);
 
   const roll = useCallback(() => {
-    if (rolling || dice !== null || winner) return;
+    if (rolling || dice !== null || winner || !myTurn) return;
     setRolling(true);
     sfx("roll");
     const value = 1 + Math.floor(Math.random() * 3);
@@ -197,7 +197,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       setPoints(value);
       setRolling(false);
     }, 450);
-  }, [rolling, dice, winner, sfx]);
+  }, [rolling, dice, winner, sfx, myTurn]);
 
   const hasMoveWith = (list: Piece[], player: Player, pts: number) =>
     pts > 0 &&
@@ -388,7 +388,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   }, [botTurn]);
 
   const tapSquare = (row: number, col: number) => {
-    if (winner || botTurn) return;
+    if (winner || botTurn || !myTurn) return;
     const occupant = pieceAt(pieces, row, col);
     const move = moves.find((m) => m.row === row && m.col === col);
 
@@ -471,7 +471,8 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       <section className="game-board-area flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2">
         <div className="game-board shrink-0 rounded-3xl bg-board p-2 shadow-lg">
           {Array.from({ length: ROWS }, (_, visualRow) => {
-            const row = mode === "bot" ? ROWS - 1 - visualRow : visualRow;
+            const flip = mode === "bot" || (mode === "online" && online?.myPlayer === 2);
+            const row = flip ? ROWS - 1 - visualRow : visualRow;
             const off = rowOffset(row);
             return (
               <div
