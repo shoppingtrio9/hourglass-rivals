@@ -29,9 +29,22 @@ import { payoutWin, rollLuckyReward, type LuckyReward } from "@/lib/coins";
 import { App } from "@capacitor/app";
 import { getSelectedSkin, getSkinById } from "@/lib/skins";
 import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
+import {
+  subscribeRoom,
+  pushGameState,
+  markRoomFinished,
+  markRoomLeft,
+  type OnlineGameState,
+} from "@/lib/online";
 
 
-export type GameMode = "local" | "bot";
+export type GameMode = "local" | "bot" | "online";
+
+export type OnlineSession = {
+  code: string;
+  myPlayer: Player;
+  names: Record<Player, string>;
+};
 
 type Props = {
   mode: GameMode;
@@ -39,17 +52,21 @@ type Props = {
   settings: Settings;
   stake?: number;
   luckyShot?: boolean;
+  online?: OnlineSession;
   onExit: () => void;
 };
 
-export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, onExit }: Props) {
+export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, online, onExit }: Props) {
   const elimination = rules === "elimination";
   const skin = getSkinById(getSelectedSkin());
   const modeLabel = elimination ? "Elimination Mode" : "Race Mode";
-  const label: Record<Player, string> = {
-    1: getProfileName(),
-    2: mode === "bot" ? "Bot" : "Player 2",
-  };
+  const label: Record<Player, string> =
+    mode === "online" && online
+      ? online.names
+      : {
+          1: getProfileName(),
+          2: mode === "bot" ? "Bot" : "Player 2",
+        };
 
 
   const [pieces, setPieces] = useState<Piece[]>(createPieces);
