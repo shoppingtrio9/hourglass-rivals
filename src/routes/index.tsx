@@ -1,3 +1,4 @@
+    recordLuckyMatchPlayed();
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { GameScreen, type GameMode } from "@/components/GameScreen";
@@ -18,7 +19,8 @@ import {
 import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
 import { initAds, showBannerAd, hideBannerAd } from "@/lib/ads";
-import { getCoins, getGems, placeStake } from "@/lib/coins";
+import { StatusBar, Style } from "@capacitor/status-bar";
+import { getCoins, getGems, placeStake, placeStakeWithGems, canPlayLuckyMatch, recordLuckyMatchPlayed } from "@/lib/coins";
 
 
 export const Route = createFileRoute("/")({
@@ -67,12 +69,16 @@ function App() {
   const [gems, setGems] = useState(0);
   const [stake, setStake] = useState<number | undefined>(undefined);
   const [luckyShot, setLuckyShot] = useState(false);
+  const [luckyAvailable, setLuckyAvailable] = useState(true);
   const { settings, update } = useSettings();
 
   useEffect(() => {
     initAds();
+    StatusBar.hide().catch(() => {});
+    StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
     setCoins(getCoins());
     setGems(getGems());
+      setLuckyAvailable(canPlayLuckyMatch());
   }, []);
 
   useEffect(() => {
@@ -110,7 +116,16 @@ function App() {
     setScreen("game");
   };
 
+  const pickStakeWithGems = (amount: number) => {
+    if (!placeStakeWithGems(amount)) return;
+    setGems(getGems());
+    setStake(amount);
+    setGameKey((k) => k + 1);
+    setScreen("game");
+  };
+
   const startLuckyShot = () => {
+    if (!canPlayLuckyMatch()) return;
     setMode("bot");
     setRules("elimination");
     setStake(undefined);
@@ -169,7 +184,7 @@ function App() {
     );
   if (screen === "stake")
     return (
-      <StakeSelectScreen coins={coins} onPick={pickStake} onBack={() => setScreen("modes")} />
+      <StakeSelectScreen coins={coins} gems={gems} onPick={pickStake} onPickWithGems={pickStakeWithGems} onBack={() => setScreen("modes")} />
     );
   if (screen === "game")
     return (
@@ -194,6 +209,7 @@ function App() {
       onCoinsClick={() => setScreen("coins")}
       onGemsClick={() => setScreen("gems")}
       onLuckyShot={startLuckyShot}
+      luckyAvailable={luckyAvailable}
       coins={coins}
       gems={gems}
     />

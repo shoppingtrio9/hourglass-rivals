@@ -38,7 +38,7 @@ import {
   type Settings,
 } from "@/hooks/use-settings";
 import { PIECES_PER_PLAYER } from "@/lib/game";
-import { getCoins, getGems, claimDaily, canClaimDaily, msUntilNextDaily, rewardForAd, rewardGemsForAd, STAKE_OPTIONS, COIN_AMOUNTS } from "@/lib/coins";
+import { getCoins, getGems, claimDaily, canClaimDaily, msUntilNextDaily, rewardForAd, rewardGemsForAd, gemCostForStake, STAKE_OPTIONS, COIN_AMOUNTS } from "@/lib/coins";
 import { spendCoins } from "@/lib/coins";
 import { SKINS, getUnlockedSkins, unlockSkin, getSelectedSkin, selectSkin } from "@/lib/skins";
 import {
@@ -145,6 +145,7 @@ export function HomeScreen({
   onCoinsClick,
   onGemsClick,
   onLuckyShot,
+  luckyAvailable,
   coins,
   gems,
 }: {
@@ -156,6 +157,7 @@ export function HomeScreen({
   onCoinsClick: () => void;
   onGemsClick: () => void;
   onLuckyShot: () => void;
+  luckyAvailable: boolean;
   coins: number;
   gems: number;
 }) {
@@ -220,11 +222,12 @@ export function HomeScreen({
           </button>
           <button
             type="button"
-            onClick={onLuckyShot}
-            className="rounded-xl border border-border bg-card p-2.5 text-center active:scale-95"
+            onClick={() => (luckyAvailable ? onLuckyShot() : setToast("Come back tomorrow for another Lucky Match!"))}
+            className={`relative rounded-xl border border-border bg-card p-2.5 text-center active:scale-95 ${luckyAvailable ? "" : "opacity-50"}`}
           >
             <Sparkles className="mx-auto h-4 w-4 text-primary" />
             <p className="mt-1 text-[9px] font-semibold">Lucky Match</p>
+            {!luckyAvailable && <Lock className="absolute right-1 top-1 h-2.5 w-2.5 text-muted-foreground" />}
           </button>
           <button
             type="button"
@@ -562,36 +565,51 @@ export function ModeSelectScreen({
 
 export function StakeSelectScreen({
   coins,
+  gems,
   onPick,
+  onPickWithGems,
   onBack,
 }: {
   coins: number;
+  gems: number;
   onPick: (stake: number) => void;
+  onPickWithGems: (stake: number) => void;
   onBack: () => void;
 }) {
   return (
     <Shell>
       <ScreenHeader title="Choose Your Stake" onBack={onBack} />
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto pb-6 animate-fade-in">
-        <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2">
-          <Coins className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">{coins}</span>
+        <div className="mx-auto mb-2 flex items-center gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2">
+            <Coins className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">{coins}</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-full border border-sky-400/50 bg-card px-4 py-2">
+            <Diamond className="h-4 w-4 text-sky-400" />
+            <span className="text-sm font-semibold">{gems}</span>
+          </div>
         </div>
         <p className="text-center text-xs text-muted-foreground">
           Win to double your stake. Lose and the stake is gone.
         </p>
         <div className="grid grid-cols-2 gap-3">
           {STAKE_OPTIONS.map((stake) => {
-            const affordable = coins >= stake;
+            const affordableByCoins = coins >= stake;
+            const gemCost = gemCostForStake(stake);
+            const affordableByGems = !affordableByCoins && gems >= gemCost;
+            const affordable = affordableByCoins || affordableByGems;
             return (
               <button
                 key={stake}
                 type="button"
                 disabled={!affordable}
-                onClick={() => onPick(stake)}
+                onClick={() => (affordableByCoins ? onPick(stake) : onPickWithGems(stake))}
                 className={`rounded-2xl border p-4 text-center transition-transform active:scale-95 ${
                   affordable
-                    ? "border-primary bg-card"
+                    ? affordableByCoins
+                      ? "border-primary bg-card"
+                      : "border-sky-400 bg-card"
                     : "border-border bg-secondary/40 opacity-40"
                 }`}
               >
@@ -602,6 +620,12 @@ export function StakeSelectScreen({
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   Win {(stake * 2).toLocaleString()}
                 </p>
+                {affordableByGems && (
+                  <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-sky-400">
+                    <Diamond className="h-3 w-3" />
+                    Pay {gemCost} gems instead
+                  </p>
+                )}
               </button>
             );
           })}
