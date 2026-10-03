@@ -29,6 +29,7 @@ import {
   Mail,
   Diamond,
   Volume2,
+  Share2,
 } from "lucide-react";
 import {
   emptyProgress,
@@ -37,7 +38,7 @@ import {
   type Progress,
   type Settings,
 } from "@/hooks/use-settings";
-import { PIECES_PER_PLAYER } from "@/lib/game";
+import { PIECES_PER_PLAYER, type RuleSet } from "@/lib/game";
 import { getCoins, getGems, claimDaily, canClaimDaily, msUntilNextDaily, rewardForAd, rewardGemsForAd, STAKE_OPTIONS, COIN_AMOUNTS } from "@/lib/coins";
 import { spendCoins } from "@/lib/coins";
 import { SKINS, getUnlockedSkins, unlockSkin, getSelectedSkin, selectSkin } from "@/lib/skins";
