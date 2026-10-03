@@ -29,6 +29,7 @@ import {
   Mail,
   Diamond,
   Volume2,
+  Share2,
 } from "lucide-react";
 import {
   emptyProgress,
@@ -37,7 +38,7 @@ import {
   type Progress,
   type Settings,
 } from "@/hooks/use-settings";
-import { PIECES_PER_PLAYER } from "@/lib/game";
+import { PIECES_PER_PLAYER, type RuleSet } from "@/lib/game";
 import { getCoins, getGems, claimDaily, canClaimDaily, msUntilNextDaily, rewardForAd, rewardGemsForAd, STAKE_OPTIONS, COIN_AMOUNTS } from "@/lib/coins";
 import { spendCoins } from "@/lib/coins";
 import { SKINS, getUnlockedSkins, unlockSkin, getSelectedSkin, selectSkin } from "@/lib/skins";
@@ -138,6 +139,7 @@ function MenuButton({ icon, title, subtitle, onClick, locked, accent }: MenuButt
 
 export function HomeScreen({
   onPlayOffline,
+  onPlayOnline,
   onProfile,
   onSettings,
   onEquipment,
@@ -149,6 +151,7 @@ export function HomeScreen({
   gems,
 }: {
   onPlayOffline: () => void;
+  onPlayOnline: () => void;
   onProfile: () => void;
   onSettings: () => void;
   onEquipment: () => void;
@@ -252,17 +255,16 @@ export function HomeScreen({
         <div className="space-y-2.5">
           <button
             type="button"
-            onClick={() => setToast("Online play is coming soon!")}
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-secondary/40 p-4 text-left opacity-60"
+            onClick={onPlayOnline}
+            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left active:scale-[0.98]"
           >
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
-              <Globe className="h-5 w-5" />
+              <Globe className="h-5 w-5 text-primary" />
             </span>
             <div className="flex-1">
               <p className="font-display text-base">Play Online</p>
-              <p className="text-xs text-muted-foreground">Coming soon</p>
+              <p className="text-xs text-muted-foreground">Create or join a room with a friend</p>
             </div>
-            <Lock className="h-4 w-4 text-muted-foreground" />
           </button>
           <button
             type="button"
@@ -1412,6 +1414,166 @@ export function GemsScreen({
             </div>
           </div>
         </div>
+      </div>
+    </Shell>
+  );
+}
+
+export function OnlineModeScreen({
+  onCreate,
+  onJoin,
+  onBack,
+}: {
+  onCreate: () => void;
+  onJoin: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <Shell>
+      <ScreenHeader title="Play Online" onBack={onBack} />
+      <div className="flex flex-1 flex-col justify-center gap-4 pb-6 animate-fade-in">
+        <button
+          type="button"
+          onClick={onCreate}
+          className="rounded-2xl border border-primary bg-primary p-4 text-left text-primary-foreground active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary-foreground/15">
+              <Globe className="h-5 w-5" />
+            </span>
+            <span className="font-display text-base">Create Room</span>
+          </div>
+          <p className="mt-2 text-xs text-primary-foreground/80">
+            Get a room code and share it with a friend.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={onJoin}
+          className="rounded-2xl border border-border bg-card p-4 text-left active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
+              <Users className="h-5 w-5 text-primary" />
+            </span>
+            <span className="font-display text-base">Join Room</span>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Enter the 6-digit code your friend sent you.
+          </p>
+        </button>
+      </div>
+    </Shell>
+  );
+}
+
+export function CreateRoomScreen({
+  code,
+  rules,
+  onCancel,
+}: {
+  code: string;
+  rules: RuleSet;
+  onCancel: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const share = async () => {
+    const text = `Join my Hourglass Duel match! Room code: ${code}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* share dismissed */
+    }
+  };
+
+  return (
+    <Shell>
+      <ScreenHeader title="Create Room" onBack={onCancel} />
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 pb-6 text-center animate-fade-in">
+        <p className="text-xs uppercase tracking-widest text-muted-foreground">
+          {rules === "elimination" ? "Elimination Mode" : "Race Mode"} · Room Code
+        </p>
+        <p className="font-display text-5xl tracking-[0.3em] text-primary">{code}</p>
+        <button
+          type="button"
+          onClick={share}
+          className="flex h-12 min-h-[44px] items-center gap-2 rounded-xl border border-primary/50 bg-primary/10 px-6 text-sm font-semibold text-primary active:scale-95"
+        >
+          <Share2 className="h-4 w-4" />
+          {copied ? "Copied!" : "Share Code"}
+        </button>
+        <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          Waiting for your friend to join…
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="mt-4 h-12 min-h-[44px] w-full max-w-xs rounded-xl border border-destructive/60 bg-destructive/15 text-sm font-semibold active:scale-95"
+        >
+          Cancel Room
+        </button>
+      </div>
+    </Shell>
+  );
+}
+
+export function JoinRoomScreen({
+  onJoin,
+  onBack,
+}: {
+  onJoin: (code: string) => Promise<"ok" | "not-found" | "full">;
+  onBack: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (code.length !== 6 || busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await onJoin(code);
+    setBusy(false);
+    if (result === "not-found") setError("Room not found");
+    else if (result === "full") setError("Room is full");
+  };
+
+  return (
+    <Shell>
+      <ScreenHeader title="Join Room" onBack={onBack} />
+      <div className="flex flex-1 flex-col justify-center gap-4 pb-6 animate-fade-in">
+        <p className="text-center text-xs uppercase tracking-widest text-muted-foreground">
+          Enter the 6-digit room code
+        </p>
+        <input
+          type="text"
+          inputMode="numeric"
+          maxLength={6}
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+            setError(null);
+          }}
+          placeholder="••••••"
+          className="h-16 w-full rounded-2xl border border-border bg-card text-center font-display text-3xl tracking-[0.3em] outline-none focus:border-primary"
+        />
+        {error && <p className="text-center text-sm font-semibold text-destructive">{error}</p>}
+        <button
+          type="button"
+          onClick={submit}
+          disabled={code.length !== 6 || busy}
+          className="h-14 min-h-[44px] w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95 disabled:opacity-40"
+        >
+          {busy ? "Joining…" : "Join"}
+        </button>
       </div>
     </Shell>
   );

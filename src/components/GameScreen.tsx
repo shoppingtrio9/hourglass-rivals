@@ -29,9 +29,22 @@ import { payoutWin, rollLuckyReward, type LuckyReward } from "@/lib/coins";
 import { App } from "@capacitor/app";
 import { getSelectedSkin, getSkinById } from "@/lib/skins";
 import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
+import {
+  subscribeRoom,
+  pushGameState,
+  markRoomFinished,
+  markRoomLeft,
+  type OnlineGameState,
+} from "@/lib/online";
 
 
-export type GameMode = "local" | "bot";
+export type GameMode = "local" | "bot" | "online";
+
+export type OnlineSession = {
+  code: string;
+  myPlayer: Player;
+  names: Record<Player, string>;
+};
 
 type Props = {
   mode: GameMode;
@@ -39,17 +52,21 @@ type Props = {
   settings: Settings;
   stake?: number;
   luckyShot?: boolean;
+  online?: OnlineSession;
   onExit: () => void;
 };
 
-export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, onExit }: Props) {
+export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, online, onExit }: Props) {
   const elimination = rules === "elimination";
   const skin = getSkinById(getSelectedSkin());
   const modeLabel = elimination ? "Elimination Mode" : "Race Mode";
-  const label: Record<Player, string> = {
-    1: getProfileName(),
-    2: mode === "bot" ? "Bot" : "Player 2",
-  };
+  const label: Record<Player, string> =
+    mode === "online" && online
+      ? online.names
+      : {
+          1: getProfileName(),
+          2: mode === "bot" ? "Bot" : "Player 2",
+        };
 
 
   const [pieces, setPieces] = useState<Piece[]>(createPieces);
@@ -69,6 +86,10 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   const [pendingExtraRoll, setPendingExtraRoll] = useState(false);
   const [luckyReward, setLuckyReward] = useState<LuckyReward | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [opponentLeft, setOpponentLeft] = useState(false);
+
+  // When true, the next state change came from Firebase — don't echo it back.
+  const suppressPush = useRef(false);
 
   const sfx = useCallback(
     (name: SfxName) => {
@@ -94,6 +115,49 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
   const botTurn = mode === "bot" && turn === 2;
+  const myTurn = mode !== "online" || !online || turn === online.myPlayer;
+
+  // Online: listen to the room and mirror remote state locally.
+  useEffect(() => {
+    if (mode !== "online" || !online) return;
+    const unsub = subscribeRoom(online.code, (room) => {
+      if (!room) return;
+      if (room.status === "left" && room.leftBy !== online.myPlayer) {
+        setOpponentLeft(true);
+        return;
+      }
+      const s = room.state;
+      suppressPush.current = true;
+      setPieces(s.pieces);
+      setTurn(s.turn);
+      setDice(s.dice);
+      setPoints(s.points);
+      setMoveCount(s.moveCount);
+      setReached(s.reached);
+      setWinner(s.winner);
+      setSelectedId(null);
+    });
+    return unsub;
+  }, [mode, online]);
+
+  // Online: push every local state change to the room.
+  useEffect(() => {
+    if (mode !== "online" || !online) return;
+    if (suppressPush.current) {
+      suppressPush.current = false;
+      return;
+    }
+    const state: OnlineGameState = { pieces, turn, dice, points, moveCount, reached, winner };
+    if (winner) void markRoomFinished(online.code, state);
+    else void pushGameState(online.code, state);
+  }, [mode, online, pieces, turn, dice, points, moveCount, reached, winner]);
+
+  // Online: after the opponent leaves, return home shortly.
+  useEffect(() => {
+    if (!opponentLeft) return;
+    const t = window.setTimeout(onExit, 2500);
+    return () => window.clearTimeout(t);
+  }, [opponentLeft, onExit]);
 
   const moves = useMemo(
     () => (selected && points > 0 ? validMoves(pieces, selected, points, rules) : []),
@@ -124,7 +188,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   }, [turn]);
 
   const roll = useCallback(() => {
-    if (rolling || dice !== null || winner) return;
+    if (rolling || dice !== null || winner || !myTurn) return;
     setRolling(true);
     sfx("roll");
     const value = 1 + Math.floor(Math.random() * 3);
@@ -133,7 +197,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       setPoints(value);
       setRolling(false);
     }, 450);
-  }, [rolling, dice, winner, sfx]);
+  }, [rolling, dice, winner, sfx, myTurn]);
 
   const hasMoveWith = (list: Piece[], player: Player, pts: number) =>
     pts > 0 &&
@@ -324,7 +388,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   }, [botTurn]);
 
   const tapSquare = (row: number, col: number) => {
-    if (winner || botTurn) return;
+    if (winner || botTurn || !myTurn) return;
     const occupant = pieceAt(pieces, row, col);
     const move = moves.find((m) => m.row === row && m.col === col);
 
@@ -407,7 +471,8 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       <section className="game-board-area flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2">
         <div className="game-board shrink-0 rounded-3xl bg-board p-2 shadow-lg">
           {Array.from({ length: ROWS }, (_, visualRow) => {
-            const row = mode === "bot" ? ROWS - 1 - visualRow : visualRow;
+            const flip = mode === "bot" || (mode === "online" && online?.myPlayer === 2);
+            const row = flip ? ROWS - 1 - visualRow : visualRow;
             const off = rowOffset(row);
             return (
               <div
@@ -484,11 +549,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           <span>
             {botTurn
               ? "Bot is playing…"
-              : dice === null
-                ? "Roll to start your turn"
-                : selected
-                  ? "Tap a highlighted square"
-                  : "Tap one of your pieces"}
+              : mode === "online" && !myTurn
+                ? `Waiting for ${label[turn]}…`
+                : dice === null
+                  ? "Roll to start your turn"
+                  : selected
+                    ? "Tap a highlighted square"
+                    : "Tap one of your pieces"}
           </span>
         </div>
         <div className="flex items-center justify-between rounded-xl bg-secondary/60 px-3 py-2">
@@ -529,7 +596,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           <button
             type="button"
             onClick={roll}
-            disabled={dice !== null || rolling || !!winner || botTurn}
+            disabled={dice !== null || rolling || !!winner || botTurn || !myTurn}
             className="h-16 min-h-[44px] w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground transition-transform active:scale-95 disabled:opacity-40"
           >
             Roll Dice
@@ -538,7 +605,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         <button
           type="button"
           onClick={endTurn}
-          disabled={dice === null || !!winner || botTurn}
+          disabled={dice === null || !!winner || botTurn || !myTurn}
           className="h-12 min-h-[44px] w-full rounded-xl border border-border bg-secondary text-sm font-semibold text-secondary-foreground active:scale-95 disabled:opacity-40"
         >
           {anyMoveAvailable ? "Skip Turn" : "No Moves — Skip"}
@@ -568,10 +635,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             </p>
             <button
               type="button"
-              onClick={onExit}
+              onClick={() => {
+                if (mode === "online" && online) void markRoomLeft(online.code, online.myPlayer);
+                onExit();
+              }}
               className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
             >
-              Exit
+              {mode === "online" ? "Leave Match" : "Exit"}
             </button>
             <button
               type="button"
@@ -580,6 +650,16 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             >
               Keep Playing
             </button>
+          </div>
+        </div>
+      )}
+      {opponentLeft && (
+        <div className="fixed inset-0 z-[65] grid place-items-center bg-background/95 px-6 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center">
+            <p className="font-display text-lg text-primary">Opponent Left</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your opponent left the match. Returning home…
+            </p>
           </div>
         </div>
       )}
@@ -610,13 +690,15 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                   : `The bot took your ${stake.toLocaleString()} coins.`}
               </p>
             )}
-            <button
-              type="button"
-              onClick={reset}
-              className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
-            >
-              Play Again
-            </button>
+            {mode !== "online" && (
+              <button
+                type="button"
+                onClick={reset}
+                className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+              >
+                Play Again
+              </button>
+            )}
             <button
               type="button"
               onClick={onExit}

@@ -16,7 +16,7 @@ export const FRAMES: Frame[] = [
 
 export type MatchRecord = {
   date: string;
-  mode: "local" | "bot";
+  mode: "local" | "bot" | "online";
   rules: "race" | "elimination";
   result: "win" | "loss";
   stake?: number;
