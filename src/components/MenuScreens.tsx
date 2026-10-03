@@ -138,6 +138,7 @@ function MenuButton({ icon, title, subtitle, onClick, locked, accent }: MenuButt
 
 export function HomeScreen({
   onPlayOffline,
+  onPlayOnline,
   onProfile,
   onSettings,
   onEquipment,
@@ -149,6 +150,7 @@ export function HomeScreen({
   gems,
 }: {
   onPlayOffline: () => void;
+  onPlayOnline: () => void;
   onProfile: () => void;
   onSettings: () => void;
   onEquipment: () => void;
@@ -252,17 +254,16 @@ export function HomeScreen({
         <div className="space-y-2.5">
           <button
             type="button"
-            onClick={() => setToast("Online play is coming soon!")}
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-secondary/40 p-4 text-left opacity-60"
+            onClick={onPlayOnline}
+            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left active:scale-[0.98]"
           >
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
-              <Globe className="h-5 w-5" />
+              <Globe className="h-5 w-5 text-primary" />
             </span>
             <div className="flex-1">
               <p className="font-display text-base">Play Online</p>
-              <p className="text-xs text-muted-foreground">Coming soon</p>
+              <p className="text-xs text-muted-foreground">Create or join a room with a friend</p>
             </div>
-            <Lock className="h-4 w-4 text-muted-foreground" />
           </button>
           <button
             type="button"
