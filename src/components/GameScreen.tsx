@@ -549,11 +549,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           <span>
             {botTurn
               ? "Bot is playing…"
-              : dice === null
-                ? "Roll to start your turn"
-                : selected
-                  ? "Tap a highlighted square"
-                  : "Tap one of your pieces"}
+              : mode === "online" && !myTurn
+                ? `Waiting for ${label[turn]}…`
+                : dice === null
+                  ? "Roll to start your turn"
+                  : selected
+                    ? "Tap a highlighted square"
+                    : "Tap one of your pieces"}
           </span>
         </div>
         <div className="flex items-center justify-between rounded-xl bg-secondary/60 px-3 py-2">
@@ -594,7 +596,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           <button
             type="button"
             onClick={roll}
-            disabled={dice !== null || rolling || !!winner || botTurn}
+            disabled={dice !== null || rolling || !!winner || botTurn || !myTurn}
             className="h-16 min-h-[44px] w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground transition-transform active:scale-95 disabled:opacity-40"
           >
             Roll Dice
@@ -603,7 +605,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         <button
           type="button"
           onClick={endTurn}
-          disabled={dice === null || !!winner || botTurn}
+          disabled={dice === null || !!winner || botTurn || !myTurn}
           className="h-12 min-h-[44px] w-full rounded-xl border border-border bg-secondary text-sm font-semibold text-secondary-foreground active:scale-95 disabled:opacity-40"
         >
           {anyMoveAvailable ? "Skip Turn" : "No Moves — Skip"}
@@ -633,10 +635,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             </p>
             <button
               type="button"
-              onClick={onExit}
+              onClick={() => {
+                if (mode === "online" && online) void markRoomLeft(online.code, online.myPlayer);
+                onExit();
+              }}
               className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
             >
-              Exit
+              {mode === "online" ? "Leave Match" : "Exit"}
             </button>
             <button
               type="button"
