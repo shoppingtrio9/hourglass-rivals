@@ -653,6 +653,16 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           </div>
         </div>
       )}
+      {opponentLeft && (
+        <div className="fixed inset-0 z-[65] grid place-items-center bg-background/95 px-6 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center">
+            <p className="font-display text-lg text-primary">Opponent Left</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Your opponent left the match. Returning home…
+            </p>
+          </div>
+        </div>
+      )}
       {winner && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/90 px-6 animate-fade-in">
           <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
@@ -680,13 +690,15 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                   : `The bot took your ${stake.toLocaleString()} coins.`}
               </p>
             )}
-            <button
-              type="button"
-              onClick={reset}
-              className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
-            >
-              Play Again
-            </button>
+            {mode !== "online" && (
+              <button
+                type="button"
+                onClick={reset}
+                className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+              >
+                Play Again
+              </button>
+            )}
             <button
               type="button"
               onClick={onExit}
