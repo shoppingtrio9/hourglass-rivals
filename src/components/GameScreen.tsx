@@ -48,11 +48,11 @@ export type OnlineSession = {
 
 type Props = {
   mode: GameMode;
-  rules?: RuleSet;
+  rules?: RuleSet | undefined;
   settings: Settings;
-  stake?: number;
-  luckyShot?: boolean;
-  online?: OnlineSession;
+  stake?: number | undefined;
+  luckyShot?: boolean | undefined;
+  online?: OnlineSession | undefined;
   onExit: () => void;
 };
 
@@ -117,17 +117,27 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   const botTurn = mode === "bot" && turn === 2;
   const myTurn = mode !== "online" || !online || turn === online.myPlayer;
 
-  // Online: listen to the room and mirror remote state locally.
+  // Online sync. We track the last state known to be in Firebase (serialized)
+  // and only push when local state differs from it. This avoids the old
+  // boolean "suppress" flag getting stuck when an echoed snapshot causes no
+  // re-render (which silently swallowed the next local roll/move), and stops
+  // the default mount state from overwriting the room before it's loaded.
+  const lastSynced = useRef<string | null>(null);
+
   useEffect(() => {
     if (mode !== "online" || !online) return;
+    lastSynced.current = null;
     const unsub = subscribeRoom(online.code, (room) => {
       if (!room) return;
       if (room.status === "left" && room.leftBy !== online.myPlayer) {
         setOpponentLeft(true);
         return;
       }
-      const s = room.state;
-      suppressPush.current = true;
+      if (!room.state) return;
+      const s = normalizeOnlineState(room.state);
+      const key = JSON.stringify(s);
+      if (key === lastSynced.current) return;
+      lastSynced.current = key;
       setPieces(s.pieces);
       setTurn(s.turn);
       setDice(s.dice);
@@ -140,16 +150,15 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     return unsub;
   }, [mode, online]);
 
-  // Online: push every local state change to the room.
   useEffect(() => {
     if (mode !== "online" || !online) return;
-    if (suppressPush.current) {
-      suppressPush.current = false;
-      return;
-    }
-    const state: OnlineGameState = { pieces, turn, dice, points, moveCount, reached, winner };
-    if (winner) void markRoomFinished(online.code, state);
-    else void pushGameState(online.code, state);
+    if (lastSynced.current === null) return; // room not loaded yet
+    const state = normalizeOnlineState({ pieces, turn, dice, points, moveCount, reached, winner });
+    const key = JSON.stringify(state);
+    if (key === lastSynced.current) return;
+    lastSynced.current = key;
+    const p = winner ? markRoomFinished(online.code, state) : pushGameState(online.code, state);
+    p.catch((e) => console.error("Online sync failed:", e));
   }, [mode, online, pieces, turn, dice, points, moveCount, reached, winner]);
 
   // Online: after the opponent leaves, return home shortly.

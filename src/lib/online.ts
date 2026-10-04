@@ -44,6 +44,36 @@ export const initialOnlineState = (): OnlineGameState => ({
   winner: null,
 });
 
+/**
+ * Firebase drops null values and empty arrays, and turns {1:x,2:y} into
+ * arrays. Normalize so both devices compare/use identical shapes.
+ */
+export function normalizeOnlineState(raw: Partial<OnlineGameState> | null | undefined): OnlineGameState {
+  const r = raw ?? {};
+  const reachedRaw = (r.reached ?? {}) as Record<number, number | undefined>;
+  const piecesRaw = (r.pieces ?? []) as unknown;
+  const pieces = (Array.isArray(piecesRaw) ? piecesRaw : Object.values(piecesRaw as object))
+    .filter(Boolean)
+    .map((p: Piece) => ({
+      id: p.id,
+      player: p.player,
+      row: p.row,
+      col: p.col,
+      startRow: p.startRow,
+      startCol: p.startCol,
+      home: !!p.home,
+    }));
+  return {
+    pieces,
+    turn: r.turn === 2 ? 2 : 1,
+    dice: typeof r.dice === "number" ? r.dice : null,
+    points: r.points ?? 0,
+    moveCount: r.moveCount ?? 0,
+    reached: { 1: reachedRaw[1] ?? 0, 2: reachedRaw[2] ?? 0 },
+    winner: r.winner === 1 || r.winner === 2 ? r.winner : null,
+  };
+}
+
 const roomRef = (code: string) => ref(db, `rooms/${code}`);
 
 export function generateRoomCode(): string {
