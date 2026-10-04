@@ -33,6 +33,7 @@ import {
   subscribeRoom,
   pushGameState,
   markRoomFinished,
+  normalizeOnlineState,
   markRoomLeft,
   type OnlineGameState,
 } from "@/lib/online";
