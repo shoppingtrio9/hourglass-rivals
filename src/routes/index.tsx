@@ -253,6 +253,26 @@ function App() {
     return (
       <StakeSelectScreen coins={coins} onPick={pickStake} onBack={() => setScreen("modes")} />
     );
+  if (screen === "online")
+    return (
+      <OnlineModeScreen
+        onCreate={() => setScreen("onlineRules")}
+        onJoin={() => setScreen("joinRoom")}
+        onBack={() => setScreen("home")}
+      />
+    );
+  if (screen === "onlineRules")
+    return (
+      <ModeSelectScreen
+        heading="Create Room"
+        onPick={pickOnlineRules}
+        onBack={() => setScreen("online")}
+      />
+    );
+  if (screen === "createRoom" && roomCode)
+    return <CreateRoomScreen code={roomCode} rules={rules} onCancel={cancelRoom} />;
+  if (screen === "joinRoom")
+    return <JoinRoomScreen onJoin={joinByCode} onBack={() => setScreen("online")} />;
   if (screen === "game")
     return (
       <GameScreen
@@ -262,6 +282,7 @@ function App() {
         settings={settings}
         stake={stake}
         luckyShot={luckyShot}
+        online={onlineSession ?? undefined}
         onExit={() => setScreen("home")}
       />
     );
@@ -269,6 +290,7 @@ function App() {
   return (
     <HomeScreen
       onPlayOffline={() => setScreen("offline")}
+      onPlayOnline={() => setScreen("online")}
       onProfile={() => setScreen("profile")}
       onSettings={() => setScreen("settings")}
       onEquipment={() => setScreen("equipment")}
