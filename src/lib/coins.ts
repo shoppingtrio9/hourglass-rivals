@@ -26,7 +26,7 @@ const LUCKY_REWARD_POOL: LuckyReward[] = [
 ];
 
 export function rollLuckyReward(): LuckyReward {
-  const reward = LUCKY_REWARD_POOL[Math.floor(Math.random() * LUCKY_REWARD_POOL.length)];
+  const reward = LUCKY_REWARD_POOL[Math.floor(Math.random() * LUCKY_REWARD_POOL.length)]!;
   if (reward.type === "coins") addCoins(reward.amount);
   else addGems(reward.amount);
   return reward;

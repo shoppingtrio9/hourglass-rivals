@@ -65,5 +65,5 @@ export function selectSkin(id: string) {
 }
 
 export function getSkinById(id: string): Skin {
-  return SKINS.find((s) => s.id === id) ?? SKINS[0];
+  return SKINS.find((s) => s.id === id) ?? SKINS[0]!;
 }
