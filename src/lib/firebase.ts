@@ -5,7 +5,7 @@ import { getDatabase } from "firebase/database";
 // Realtime Database rules, not by hiding the key). It is injected at build
 // time via the VITE_GOOGLE_API_KEY environment variable.
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_GOOGLE_API_KEY ?? "",
+  apiKey: import.meta.env["VITE_GOOGLE_API_KEY"] ?? "",
   authDomain: "hourglass-duel.firebaseapp.com",
   databaseURL: "https://hourglass-duel-default-rtdb.firebaseio.com",
   projectId: "hourglass-duel",

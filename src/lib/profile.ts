@@ -19,8 +19,8 @@ export type MatchRecord = {
   mode: "local" | "bot" | "online";
   rules: "race" | "elimination";
   result: "win" | "loss";
-  stake?: number;
-  payout?: number;
+  stake?: number | undefined;
+  payout?: number | undefined;
 };
 
 export type Title = {
@@ -119,7 +119,7 @@ export function selectFrame(id: string) {
 }
 
 export function getFrameById(id: string): Frame {
-  return FRAMES.find((f) => f.id === id) ?? FRAMES[0];
+  return FRAMES.find((f) => f.id === id) ?? FRAMES[0]!;
 }
 
 export function getMatchHistory(): MatchRecord[] {
@@ -183,5 +183,5 @@ export function getUnlockedTitles(): Title[] {
 /** The highest-tier unlocked title, or null if none yet. */
 export function getCurrentTitle(): Title | null {
   const unlocked = getUnlockedTitles();
-  return unlocked.length > 0 ? unlocked[unlocked.length - 1] : null;
+  return unlocked.length > 0 ? unlocked[unlocked.length - 1]! : null;
 }
