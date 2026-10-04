@@ -90,7 +90,6 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   const [opponentLeft, setOpponentLeft] = useState(false);
 
   // When true, the next state change came from Firebase — don't echo it back.
-  const suppressPush = useRef(false);
 
   const sfx = useCallback(
     (name: SfxName) => {
