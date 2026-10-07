@@ -9,7 +9,7 @@ import {
   type Unsubscribe,
 } from "firebase/database";
 import { db } from "@/lib/firebase";
-import { addCoins, spendCoins, payoutWin } from "@/lib/coins";
+import { spendCoins, payoutWin } from "@/lib/coins";
 import { createPieces, type Piece, type Player, type RuleSet } from "@/lib/game";
 
 /** Serializable match state shared between both players via Firebase. */
@@ -216,7 +216,7 @@ function once(kind: string, code: string, round: number, fn: () => void): boolea
 export function chargeStakeOnce(code: string, round: number, stake: number): void {
   if (stake <= 0) return;
   once("charge", code, round, () => {
-    if (!spendCoins(stake)) addCoins(0);
+    spendCoins(stake);
   });
 }
 
