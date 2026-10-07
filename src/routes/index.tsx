@@ -31,6 +31,7 @@ import {
   deleteRoom,
   subscribeRoom,
   generateRoomCode,
+  peekRoom,
   type JoinResult,
 } from "@/lib/online";
 
@@ -63,6 +64,7 @@ type Screen =
   | "offline"
   | "online"
   | "onlineRules"
+  | "onlineStake"
   | "createRoom"
   | "joinRoom"
   | "modes"

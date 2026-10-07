@@ -513,7 +513,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         )}
         <div
           className={`game-turn-panel mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            turn === 1 ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
+            turn === myColorPlayer ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
           }`}
         >
           <div className="min-w-0">
