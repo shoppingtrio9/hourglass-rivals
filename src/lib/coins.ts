@@ -13,6 +13,33 @@ export const GEM_TO_COIN_RATE = 10;
 export const LUCKY_SHOT_GEM_COST = 20;
 export const LUCKY_SHOT_COIN_REWARD = 200;
 
+const LUCKY_MATCH_KEY = "hourglass-lucky-match-time";
+const LUCKY_MATCH_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+export function msUntilNextLuckyMatch(): number {
+  try {
+    const raw = window.localStorage.getItem(LUCKY_MATCH_KEY);
+    if (!raw) return 0;
+    const last = parseInt(raw, 10);
+    const elapsed = Date.now() - last;
+    return Math.max(0, LUCKY_MATCH_COOLDOWN_MS - elapsed);
+  } catch {
+    return 0;
+  }
+}
+
+export function canPlayLuckyMatch(): boolean {
+  return msUntilNextLuckyMatch() <= 0;
+}
+
+export function recordLuckyMatchPlayed() {
+  try {
+    window.localStorage.setItem(LUCKY_MATCH_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
 export type LuckyReward = { type: "coins" | "gems"; amount: number };
 
 const LUCKY_REWARD_POOL: LuckyReward[] = [

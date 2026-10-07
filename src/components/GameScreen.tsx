@@ -25,7 +25,7 @@ import {
 import { chooseBotMove } from "@/lib/bot";
 import { playSfx, startMusic, stopMusic, type SfxName } from "@/lib/audio";
 import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings";
-import { payoutWin, rollLuckyReward, type LuckyReward } from "@/lib/coins";
+import { payoutWin, rollLuckyReward, placeStake, type LuckyReward } from "@/lib/coins";
 import { App } from "@capacitor/app";
 import { getSelectedSkin, getSkinById } from "@/lib/skins";
 import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
@@ -190,6 +190,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     setPendingExtraRoll(false);
   }, []);
 
+  const playAgain = useCallback(() => {
+    if (mode === "bot" && !luckyShot && stake) {
+      if (!placeStake(stake)) return;
+    }
+    reset();
+  }, [mode, luckyShot, stake, reset]);
+
   // Extra-roll perk is per-turn: re-arm it whenever the turn changes.
   useEffect(() => {
     setExtraRollUsed(false);
@@ -226,6 +233,12 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     setSelectedId(null);
     setTurn((t) => (t === 1 ? 2 : 1));
   }, []);
+  useEffect(() => {
+    if (winner || botTurn || dice === null || points <= 0 || anyMoveAvailable) return;
+    const t = window.setTimeout(() => endTurn(), 900);
+    return () => window.clearTimeout(t);
+  }, [winner, botTurn, dice, points, anyMoveAvailable, endTurn]);
+
 
   const winnerRef = useRef<Player | null>(null);
   winnerRef.current = winner;
@@ -611,14 +624,6 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             Roll Dice
           </button>
         </div>
-        <button
-          type="button"
-          onClick={endTurn}
-          disabled={dice === null || !!winner || botTurn || !myTurn}
-          className="h-12 min-h-[44px] w-full rounded-xl border border-border bg-secondary text-sm font-semibold text-secondary-foreground active:scale-95 disabled:opacity-40"
-        >
-          {anyMoveAvailable ? "Skip Turn" : "No Moves — Skip"}
-        </button>
       </footer>
 
       {adPlaying && (
@@ -699,10 +704,10 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                   : `The bot took your ${stake.toLocaleString()} coins.`}
               </p>
             )}
-            {mode !== "online" && (
+            {mode !== "online" && !luckyShot && (
               <button
                 type="button"
-                onClick={reset}
+                onClick={playAgain}
                 className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
               >
                 Play Again
@@ -711,7 +716,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             <button
               type="button"
               onClick={onExit}
-              className="mt-3 h-12 w-full rounded-2xl border border-border bg-secondary text-sm font-semibold active:scale-95"
+              className={`h-12 w-full rounded-2xl border border-border bg-secondary text-sm font-semibold active:scale-95 ${luckyShot ? "mt-6" : "mt-3"}`}
             >
               Back to Menu
             </button>
