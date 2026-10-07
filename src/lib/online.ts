@@ -5,9 +5,11 @@ import {
   update,
   remove,
   onValue,
+  onDisconnect,
   type Unsubscribe,
 } from "firebase/database";
 import { db } from "@/lib/firebase";
+import { spendCoins, payoutWin } from "@/lib/coins";
 import { createPieces, type Piece, type Player, type RuleSet } from "@/lib/game";
 
 /** Serializable match state shared between both players via Firebase. */
@@ -32,6 +34,14 @@ export type Room = {
   leftBy?: Player;
   createdAt: number;
   state: OnlineGameState;
+  /** Coin stake per player (0 = free room). */
+  stake?: number;
+  /** Match counter; increments on every rematch. */
+  round?: number;
+  /** True once the current round's result has been settled. */
+  settled?: boolean;
+  /** Rematch requests for the next round. */
+  rematch?: Partial<Record<Player, boolean>>;
 };
 
 export const initialOnlineState = (): OnlineGameState => ({
@@ -84,10 +94,14 @@ export async function createRoom(
   code: string,
   hostName: string,
   rules: RuleSet,
+  stake = 0,
 ): Promise<void> {
   const room: Room = {
     status: "waiting",
     rules,
+    stake,
+    round: 1,
+    settled: false,
     hostName,
     createdAt: Date.now(),
     state: initialOnlineState(),
@@ -95,7 +109,18 @@ export async function createRoom(
   await set(roomRef(code), room);
 }
 
-export type JoinResult = "ok" | "not-found" | "full";
+export type JoinResult = "ok" | "not-found" | "full" | "no-coins";
+
+export type RoomPreview = { rules: RuleSet; stake: number; hostName: string };
+
+/** Read a room's rules/stake before joining. */
+export async function peekRoom(code: string): Promise<RoomPreview | "not-found" | "full"> {
+  const snap = await get(roomRef(code));
+  if (!snap.exists()) return "not-found";
+  const room = snap.val() as Room;
+  if (room.status !== "waiting") return "full";
+  return { rules: room.rules, stake: room.stake ?? 0, hostName: room.hostName };
+}
 
 export async function joinRoom(code: string, guestName: string): Promise<JoinResult> {
   const snap = await get(roomRef(code));
@@ -122,7 +147,7 @@ export async function pushGameState(code: string, state: OnlineGameState): Promi
 }
 
 export async function markRoomFinished(code: string, state: OnlineGameState): Promise<void> {
-  await update(roomRef(code), { status: "finished", state });
+  await update(roomRef(code), { status: "finished", state, settled: true });
   scheduleRoomCleanup(code);
 }
 
@@ -148,4 +173,54 @@ export function scheduleRoomCleanup(code: string, delayMs = 30_000): void {
   window.setTimeout(() => {
     void deleteRoom(code);
   }, delayMs);
+}
+
+/** If this device disconnects mid-match, tell the opponent it forfeited. */
+export function armDisconnectForfeit(code: string, player: Player): () => void {
+  const od = onDisconnect(roomRef(code));
+  void od.update({ status: "left", leftBy: player }).catch(() => {});
+  return () => {
+    void od.cancel().catch(() => {});
+  };
+}
+
+export async function requestRematch(code: string, player: Player): Promise<void> {
+  await update(roomRef(code), { [`rematch/${player}`]: true });
+}
+
+/** Host starts the next round once both players asked for a rematch. */
+export async function startRematch(code: string, nextRound: number): Promise<void> {
+  await update(roomRef(code), {
+    status: "active",
+    round: nextRound,
+    settled: false,
+    rematch: null,
+    state: initialOnlineState(),
+  });
+}
+
+// Per-device, per-round guards so a refresh/reconnect never double-charges or double-pays.
+const guardKey = (kind: string, code: string, round: number) => `hg-online-${kind}-${code}-${round}`;
+function once(kind: string, code: string, round: number, fn: () => void): boolean {
+  try {
+    const k = guardKey(kind, code, round);
+    if (window.localStorage.getItem(k)) return false;
+    window.localStorage.setItem(k, "1");
+  } catch {
+    /* ignore */
+  }
+  fn();
+  return true;
+}
+
+export function chargeStakeOnce(code: string, round: number, stake: number): void {
+  if (stake <= 0) return;
+  once("charge", code, round, () => {
+    spendCoins(stake);
+  });
+}
+
+export function payoutStakeOnce(code: string, round: number, stake: number): void {
+  if (stake <= 0) return;
+  once("payout", code, round, () => payoutWin(stake));
 }
