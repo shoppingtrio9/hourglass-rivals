@@ -570,12 +570,16 @@ export function StakeSelectScreen({
   gems,
   onPick,
   onPickWithGems,
+  onPickFree,
   onBack,
 }: {
   coins: number;
   gems: number;
   onPick: (stake: number) => void;
-  onPickWithGems: (stake: number) => void;
+  /** Omit to disable paying with gems (online rooms are coin-only). */
+  onPickWithGems?: ((stake: number) => void) | undefined;
+  /** When set, shows a "Free — no stake" option. */
+  onPickFree?: (() => void) | undefined;
   onBack: () => void;
 }) {
   return (
@@ -595,18 +599,27 @@ export function StakeSelectScreen({
         <p className="text-center text-xs text-muted-foreground">
           Win to double your stake. Lose and the stake is gone.
         </p>
+        {onPickFree && (
+          <button
+            type="button"
+            onClick={onPickFree}
+            className="rounded-2xl border border-border bg-card p-4 text-center font-display text-base active:scale-95"
+          >
+            Free — No Stake
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-3">
           {STAKE_OPTIONS.map((stake) => {
             const affordableByCoins = coins >= stake;
             const gemCost = gemCostForStake(stake);
-            const affordableByGems = !affordableByCoins && gems >= gemCost;
+            const affordableByGems = !!onPickWithGems && !affordableByCoins && gems >= gemCost;
             const affordable = affordableByCoins || affordableByGems;
             return (
               <button
                 key={stake}
                 type="button"
                 disabled={!affordable}
-                onClick={() => (affordableByCoins ? onPick(stake) : onPickWithGems(stake))}
+                onClick={() => (affordableByCoins ? onPick(stake) : onPickWithGems?.(stake))}
                 className={`rounded-2xl border p-4 text-center transition-transform active:scale-95 ${
                   affordable
                     ? affordableByCoins
@@ -1494,10 +1507,12 @@ export function OnlineModeScreen({
 export function CreateRoomScreen({
   code,
   rules,
+  stake = 0,
   onCancel,
 }: {
   code: string;
   rules: RuleSet;
+  stake?: number | undefined;
   onCancel: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -1522,7 +1537,8 @@ export function CreateRoomScreen({
       <ScreenHeader title="Create Room" onBack={onCancel} />
       <div className="flex flex-1 flex-col items-center justify-center gap-5 pb-6 text-center animate-fade-in">
         <p className="text-xs uppercase tracking-widest text-muted-foreground">
-          {rules === "elimination" ? "Elimination Mode" : "Race Mode"} · Room Code
+          {rules === "elimination" ? "Elimination Mode" : "Race Mode"} ·{" "}
+          {stake > 0 ? `${stake.toLocaleString()} Coin Stake` : "Free"} · Room Code
         </p>
         <p className="font-display text-5xl tracking-[0.3em] text-primary">{code}</p>
         <button
@@ -1550,25 +1566,42 @@ export function CreateRoomScreen({
 }
 
 export function JoinRoomScreen({
+  coins,
+  onPeek,
   onJoin,
   onBack,
 }: {
-  onJoin: (code: string) => Promise<"ok" | "not-found" | "full">;
+  coins: number;
+  onPeek: (
+    code: string,
+  ) => Promise<{ rules: RuleSet; stake: number; hostName: string } | "not-found" | "full">;
+  onJoin: (code: string) => Promise<"ok" | "not-found" | "full" | "no-coins">;
   onBack: () => void;
 }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<{ rules: RuleSet; stake: number; hostName: string } | null>(null);
 
   const submit = async () => {
     if (code.length !== 6 || busy) return;
     setBusy(true);
     setError(null);
+    if (!preview) {
+      const info = await onPeek(code);
+      setBusy(false);
+      if (info === "not-found") setError("Room not found");
+      else if (info === "full") setError("Room is full");
+      else setPreview(info);
+      return;
+    }
     const result = await onJoin(code);
     setBusy(false);
     if (result === "not-found") setError("Room not found");
     else if (result === "full") setError("Room is full");
+    else if (result === "no-coins") setError("Not enough coins for this room's stake");
   };
+  const short = !!preview && preview.stake > coins;
 
   return (
     <Shell>
@@ -1585,18 +1618,40 @@ export function JoinRoomScreen({
           onChange={(e) => {
             setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
             setError(null);
+            setPreview(null);
           }}
           placeholder="••••••"
           className="h-16 w-full rounded-2xl border border-border bg-card text-center font-display text-3xl tracking-[0.3em] outline-none focus:border-primary"
         />
+        {preview && (
+          <div className="rounded-2xl border border-primary/50 bg-card p-4 text-center">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              {preview.hostName}'s room
+            </p>
+            <p className="mt-1 font-display text-base">
+              {preview.rules === "elimination" ? "Elimination Mode" : "Race Mode"}
+            </p>
+            <p className="mt-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary">
+              <Coins className="h-4 w-4" />
+              {preview.stake > 0
+                ? `${preview.stake.toLocaleString()} coin stake · Win ${(preview.stake * 2).toLocaleString()}`
+                : "Free match"}
+            </p>
+            {short && (
+              <p className="mt-2 text-sm font-semibold text-destructive">
+                You need {preview.stake.toLocaleString()} coins to join (you have {coins.toLocaleString()}).
+              </p>
+            )}
+          </div>
+        )}
         {error && <p className="text-center text-sm font-semibold text-destructive">{error}</p>}
         <button
           type="button"
           onClick={submit}
-          disabled={code.length !== 6 || busy}
+          disabled={code.length !== 6 || busy || short}
           className="h-14 min-h-[44px] w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95 disabled:opacity-40"
         >
-          {busy ? "Joining…" : "Join"}
+          {busy ? "Please wait…" : preview ? "Confirm & Join" : "Find Room"}
         </button>
       </div>
     </Shell>

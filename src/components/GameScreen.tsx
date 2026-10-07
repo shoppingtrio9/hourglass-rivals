@@ -25,7 +25,7 @@ import {
 import { chooseBotMove } from "@/lib/bot";
 import { playSfx, startMusic, stopMusic, type SfxName } from "@/lib/audio";
 import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings";
-import { payoutWin, rollLuckyReward, placeStake, type LuckyReward } from "@/lib/coins";
+import { payoutWin, rollLuckyReward, placeStake, getCoins, type LuckyReward } from "@/lib/coins";
 import { App } from "@capacitor/app";
 import { getSelectedSkin, getSkinById } from "@/lib/skins";
 import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
@@ -35,6 +35,11 @@ import {
   markRoomFinished,
   normalizeOnlineState,
   markRoomLeft,
+  armDisconnectForfeit,
+  requestRematch,
+  startRematch,
+  chargeStakeOnce,
+  payoutStakeOnce,
   type OnlineGameState,
 } from "@/lib/online";
 
@@ -45,6 +50,8 @@ export type OnlineSession = {
   code: string;
   myPlayer: Player;
   names: Record<Player, string>;
+  /** Coins each player puts in (0 = free room). */
+  stake: number;
 };
 
 type Props = {
@@ -123,6 +130,10 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   // re-render (which silently swallowed the next local roll/move), and stops
   // the default mount state from overwriting the room before it's loaded.
   const lastSynced = useRef<string | null>(null);
+  const onlineWinnerRef = useRef<Player | null>(null);
+  const [round, setRound] = useState(0);
+  const [rematch, setRematch] = useState<Partial<Record<Player, boolean>>>({});
+  const onlineStake = mode === "online" && online ? online.stake : 0;
 
   useEffect(() => {
     if (mode !== "online" || !online) return;
@@ -130,8 +141,17 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     const unsub = subscribeRoom(online.code, (room) => {
       if (!room) return;
       if (room.status === "left" && room.leftBy !== online.myPlayer) {
-        setOpponentLeft(true);
+        // Leaving mid-match is a forfeit; leaving after the result is just leaving.
+        if (!onlineWinnerRef.current) {
+          setOpponentLeft(true);
+          if (online.stake > 0) payoutStakeOnce(online.code, room.round ?? 1, online.stake);
+        }
         return;
+      }
+      setRound(room.round ?? 1);
+      setRematch(room.rematch ?? {});
+      if (room.rematch?.[1] && room.rematch?.[2] && online.myPlayer === 1) {
+        void startRematch(online.code, (room.round ?? 1) + 1);
       }
       if (!room.state) return;
       const s = normalizeOnlineState(room.state);
@@ -160,6 +180,26 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     const p = winner ? markRoomFinished(online.code, state) : pushGameState(online.code, state);
     p.catch((e) => console.error("Online sync failed:", e));
   }, [mode, online, pieces, turn, dice, points, moveCount, reached, winner]);
+
+  onlineWinnerRef.current = winner;
+
+  // Online stakes: charge each player once per round when the match starts.
+  useEffect(() => {
+    if (mode !== "online" || !online || !round || online.stake <= 0) return;
+    chargeStakeOnce(online.code, round, online.stake);
+  }, [mode, online, round]);
+
+  // Online stakes: the winner's device collects the pot exactly once.
+  useEffect(() => {
+    if (mode !== "online" || !online || !round || !winner || online.stake <= 0) return;
+    if (winner === online.myPlayer) payoutStakeOnce(online.code, round, online.stake);
+  }, [mode, online, round, winner]);
+
+  // Online: a dropped connection mid-match counts as leaving (forfeit).
+  useEffect(() => {
+    if (mode !== "online" || !online || !round || winner) return;
+    return armDisconnectForfeit(online.code, online.myPlayer);
+  }, [mode, online, round, winner]);
 
   // Online: after the opponent leaves, return home shortly.
   useEffect(() => {
@@ -429,6 +469,9 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
 
   const p1Home = reached[1];
   const p2Home = reached[2];
+  // My pieces use my equipped skin + Player-1 palette; the opponent always
+  // gets the other palette, so the two sides never share a colour.
+  const myColorPlayer: Player = mode === "online" && online ? online.myPlayer : 1;
   const p1Alive = pieces.filter((p) => p.player === 1).length;
   const p2Alive = pieces.filter((p) => p.player === 2).length;
 
@@ -456,6 +499,12 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             Lucky Match
           </div>
         )}
+        {onlineStake > 0 && (
+          <div className="mt-2 mx-auto flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            <Coins className="h-3.5 w-3.5" />
+            {onlineStake.toLocaleString()} Coin Match
+          </div>
+        )}
         {mode === "bot" && !luckyShot && stake && (
           <div className="mt-2 mx-auto flex w-fit items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <Coins className="h-3.5 w-3.5" />
@@ -464,7 +513,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         )}
         <div
           className={`game-turn-panel mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-            turn === 1 ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
+            turn === myColorPlayer ? "border-p1 bg-p1/15" : "border-p2 bg-p2/15"
           }`}
         >
           <div className="min-w-0">
@@ -493,7 +542,9 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       <section className="game-board-area flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2">
         <div className="game-board shrink-0 rounded-3xl bg-board p-2 shadow-lg">
           {Array.from({ length: ROWS }, (_, visualRow) => {
-            const flip = mode === "bot" || (mode === "online" && online?.myPlayer === 2);
+            // Player 1 starts at the top rows, so whoever is "me" (Player 1 vs bot,
+            // or my seat online) gets the board flipped to sit at the bottom.
+            const flip = mode === "bot" || (mode === "online" && online?.myPlayer === 1);
             const row = flip ? ROWS - 1 - visualRow : visualRow;
             const off = rowOffset(row);
             return (
@@ -529,9 +580,9 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                       )}
                       {piece && (
                         <span
-                          style={piece.player === 1 && skin.color ? { backgroundColor: skin.color, borderColor: skin.glow } : undefined}
+                          style={piece.player === myColorPlayer && skin.color ? { backgroundColor: skin.color, borderColor: skin.glow } : undefined}
                           className={`absolute inset-[10%] rounded-full border-2 ${
-                            piece.player === 1
+                            piece.player === myColorPlayer
                               ? "border-p1-glow bg-p1"
                               : "border-p2-glow bg-p2"
                           } ${isSel ? "ring-2 ring-primary" : ""} ${
@@ -672,7 +723,9 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center">
             <p className="font-display text-lg text-primary">Opponent Left</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your opponent left the match. Returning home…
+              Your opponent left the match.
+              {onlineStake > 0 && ` You win by forfeit: +${(onlineStake * 2).toLocaleString()} coins!`}
+              {" "}Returning home…
             </p>
           </div>
         </div>
@@ -704,6 +757,32 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                   : `The bot took your ${stake.toLocaleString()} coins.`}
               </p>
             )}
+            {mode === "online" && online && onlineStake > 0 && (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold">
+                <Coins className="h-4 w-4 text-primary" />
+                {winner === online.myPlayer
+                  ? `You won ${(onlineStake * 2).toLocaleString()} coins!`
+                  : `You lost ${onlineStake.toLocaleString()} coins.`}
+              </p>
+            )}
+            {mode === "online" && online && (
+              <button
+                type="button"
+                disabled={!!rematch[online.myPlayer] || (onlineStake > 0 && getCoins() < onlineStake)}
+                onClick={() => void requestRematch(online.code, online.myPlayer)}
+                className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95 disabled:opacity-40"
+              >
+                {onlineStake > 0 && getCoins() < onlineStake
+                  ? "Not enough coins"
+                  : rematch[online.myPlayer]
+                    ? rematch[online.myPlayer === 1 ? 2 : 1]
+                      ? "Starting…"
+                      : "Waiting for opponent…"
+                    : rematch[online.myPlayer === 1 ? 2 : 1]
+                      ? "Opponent wants a rematch — Play Again"
+                      : "Play Again"}
+              </button>
+            )}
             {mode !== "online" && !luckyShot && (
               <button
                 type="button"
@@ -716,6 +795,9 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
             <button
               type="button"
               onClick={onExit}
+              onClickCapture={() => {
+                if (mode === "online" && online) void markRoomLeft(online.code, online.myPlayer);
+              }}
               className={`h-12 w-full rounded-2xl border border-border bg-secondary text-sm font-semibold active:scale-95 ${luckyShot ? "mt-6" : "mt-3"}`}
             >
               Back to Menu
