@@ -88,6 +88,7 @@ function App() {
   const [stake, setStake] = useState<number | undefined>(undefined);
   const [luckyShot, setLuckyShot] = useState(false);
   const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [onlineStakeAmount, setOnlineStakeAmount] = useState(0);
   const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
   const [luckyAvailable, setLuckyAvailable] = useState(true);
   const { settings, update } = useSettings();
@@ -128,12 +129,17 @@ function App() {
     }
   };
 
-  // Host picked a ruleset for the online room: create it and wait for a guest.
-  const pickOnlineRules = async (r: RuleSet) => {
+  // Host picked a ruleset for the online room, then picks a stake.
+  const pickOnlineRules = (r: RuleSet) => {
     setRules(r);
+    setScreen("onlineStake");
+  };
+
+  const createOnlineRoom = async (amount: number) => {
     const code = generateRoomCode();
     try {
-      await createRoom(code, getProfileName(), r);
+      await createRoom(code, getProfileName(), rules, amount);
+      setOnlineStakeAmount(amount);
       setRoomCode(code);
       setScreen("createRoom");
     } catch {
@@ -154,6 +160,7 @@ function App() {
           code: roomCode,
           myPlayer: 1,
           names: { 1: room.hostName, 2: room.guestName },
+          stake: room.stake ?? 0,
         });
         setGameKey((k) => k + 1);
         setScreen("game");
@@ -170,25 +177,19 @@ function App() {
 
   const joinByCode = async (code: string): Promise<JoinResult> => {
     const name = getProfileName();
+    const info = await peekRoom(code);
+    if (info === "not-found" || info === "full") return info;
+    if (info.stake > 0 && getCoins() < info.stake) return "no-coins";
     const result = await joinRoom(code, name);
     if (result !== "ok") return result;
-    // Read the room once via subscription to learn the rules and host name.
-    const unsub = subscribeRoom(code, (room) => {
-      unsub();
-      if (!room) return;
-      setMode("online");
-      setRules(room.rules);
-      setStake(undefined);
-      setLuckyShot(false);
-      setRoomCode(code);
-      setOnlineSession({
-        code,
-        myPlayer: 2,
-        names: { 1: room.hostName, 2: name },
-      });
-      setGameKey((k) => k + 1);
-      setScreen("game");
-    });
+    setMode("online");
+    setRules(info.rules);
+    setStake(undefined);
+    setLuckyShot(false);
+    setRoomCode(code);
+    setOnlineSession({ code, myPlayer: 2, names: { 1: info.hostName, 2: name }, stake: info.stake });
+    setGameKey((k) => k + 1);
+    setScreen("game");
     return "ok";
   };
 
@@ -286,10 +287,29 @@ function App() {
         onBack={() => setScreen("online")}
       />
     );
+  if (screen === "onlineStake")
+    return (
+      <StakeSelectScreen
+        coins={coins}
+        gems={gems}
+        onPick={(a) => void createOnlineRoom(a)}
+        onPickFree={() => void createOnlineRoom(0)}
+        onBack={() => setScreen("onlineRules")}
+      />
+    );
   if (screen === "createRoom" && roomCode)
-    return <CreateRoomScreen code={roomCode} rules={rules} onCancel={cancelRoom} />;
+    return (
+      <CreateRoomScreen code={roomCode} rules={rules} stake={onlineStakeAmount} onCancel={cancelRoom} />
+    );
   if (screen === "joinRoom")
-    return <JoinRoomScreen onJoin={joinByCode} onBack={() => setScreen("online")} />;
+    return (
+      <JoinRoomScreen
+        coins={coins}
+        onPeek={peekRoom}
+        onJoin={joinByCode}
+        onBack={() => setScreen("online")}
+      />
+    );
   if (screen === "game")
     return (
       <GameScreen
@@ -300,7 +320,10 @@ function App() {
         stake={stake}
         luckyShot={luckyShot}
         online={onlineSession ?? undefined}
-        onExit={() => setScreen("home")}
+        onExit={() => {
+          setCoins(getCoins());
+          setScreen("home");
+        }}
       />
     );
 
