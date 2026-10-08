@@ -529,6 +529,12 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   // My pieces use my equipped skin + Player-1 palette; the opponent always
   // gets the other palette, so the two sides never share a colour.
   const myColorPlayer: Player = mode === "online" && online ? online.myPlayer : 1;
+  // Opponent's real equipped colour; falls back to the default opponent palette
+  // when they use the default skin or the same colour as me.
+  const oppSkinStyle =
+    mode === "online" && oppProfile?.skinColor && oppProfile.skinColor !== skin.color
+      ? { backgroundColor: oppProfile.skinColor, borderColor: oppProfile.skinGlow }
+      : undefined;
   const p1Alive = pieces.filter((p) => p.player === 1).length;
   const p2Alive = pieces.filter((p) => p.player === 2).length;
 
@@ -594,6 +600,21 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
           </div>
 
         </div>
+        {mode === "online" && oppProfile && (
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-border bg-card/60 px-3 py-1.5 text-xs">
+            <span
+              className="h-4 w-4 shrink-0 rounded-full border-2 bg-p2 border-p2-glow"
+              style={oppSkinStyle}
+            />
+            <span className="truncate font-semibold" style={{ color: oppProfile.frameColor }}>
+              {oppProfile.name}
+            </span>
+            {oppProfile.title && <span className="truncate text-muted-foreground">· {oppProfile.title}</span>}
+            <span className="ml-auto shrink-0 text-muted-foreground">
+              🏆 {oppProfile.trophies} · {oppProfile.totalWins}W
+            </span>
+          </div>
+        )}
       </header>
 
       <section className="game-board-area flex min-h-0 flex-1 items-center justify-center overflow-hidden px-2 py-2">
@@ -637,7 +658,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
                       )}
                       {piece && (
                         <span
-                          style={piece.player === myColorPlayer && skin.color ? { backgroundColor: skin.color, borderColor: skin.glow } : undefined}
+                          style={
+                            piece.player === myColorPlayer
+                              ? skin.color
+                                ? { backgroundColor: skin.color, borderColor: skin.glow }
+                                : undefined
+                              : oppSkinStyle
+                          }
                           className={`absolute inset-[10%] rounded-full border-2 ${
                             piece.player === myColorPlayer
                               ? "border-p1-glow bg-p1"
@@ -777,13 +804,53 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       )}
       {opponentLeft && (
         <div className="fixed inset-0 z-[65] grid place-items-center bg-background/95 px-6 animate-fade-in">
-          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center">
-            <p className="font-display text-lg text-primary">Opponent Left</p>
+          <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
+            <p className="font-display text-2xl text-primary">Opponent left. You win!</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your opponent left the match.
-              {onlineStake > 0 && ` You win by forfeit: +${(onlineStake * 2).toLocaleString()} coins!`}
-              {" "}Returning home…
+              {oppProfile?.name ?? "Your opponent"} quit the match.
             </p>
+            {onlineStake > 0 && (
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm font-semibold">
+                <Coins className="h-4 w-4 text-primary" />
+                You won {(onlineStake * 2).toLocaleString()} coins!
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onExit}
+              className="mt-6 h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+            >
+              Back to Menu
+            </button>
+          </div>
+        </div>
+      )}
+      {mode === "online" && paused && !winner && !forfeit && !opponentLeft && (
+        <div className="fixed inset-0 z-[62] grid place-items-center bg-background/90 px-6 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center">
+            <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="mt-4 font-display text-lg text-primary">
+              {myConnLost ? "Connection lost. Reconnecting…" : "Opponent disconnected"}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {myConnLost
+                ? "Check your internet. If you don't reconnect in time, you lose by forfeit."
+                : "Waiting for them to reconnect…"}
+            </p>
+            <p className="mt-3 font-display text-3xl">{graceLeft}s</p>
+          </div>
+        </div>
+      )}
+      {mode === "online" && showVs && oppProfile && !winner && (
+        <div
+          className="fixed inset-0 z-[61] grid place-items-center bg-background/95 px-6 animate-fade-in"
+          onClick={() => setShowVs(false)}
+        >
+          <div className="w-full max-w-sm space-y-4 text-center">
+            <ProfileCard p={buildPublicProfile(skin)} fallback="p1" />
+            <p className="font-display text-3xl text-primary">VS</p>
+            <ProfileCard p={oppProfile} fallback="p2" />
+            <p className="text-xs text-muted-foreground">Tap to start</p>
           </div>
         </div>
       )}
@@ -863,5 +930,35 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         </div>
       )}
     </main>
+  );
+}
+
+function ProfileCard({ p, fallback }: { p: PublicProfile; fallback: "p1" | "p2" }) {
+  return (
+    <div
+      className="rounded-3xl border-2 bg-card p-4 text-left"
+      style={{ borderColor: p.frameColor }}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`h-10 w-10 shrink-0 rounded-full border-2 ${fallback === "p1" ? "bg-p1 border-p1-glow" : "bg-p2 border-p2-glow"}`}
+          style={p.skinColor ? { backgroundColor: p.skinColor, borderColor: p.skinGlow } : undefined}
+        />
+        <div className="min-w-0">
+          <p className="truncate font-display text-lg">{p.name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {p.title ?? "No title yet"} · {p.skinName} · {p.frameName}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="rounded-xl bg-secondary/60 py-1.5"><p className="font-display text-base">{p.trophies}</p>Trophies</div>
+        <div className="rounded-xl bg-secondary/60 py-1.5"><p className="font-display text-base">{p.totalWins}</p>Wins</div>
+        <div className="rounded-xl bg-secondary/60 py-1.5"><p className="font-display text-base">{p.bestWinStreak}</p>Best streak</div>
+      </div>
+      {p.topTrophies.length > 0 && (
+        <p className="mt-2 truncate text-xs text-muted-foreground">🏆 {p.topTrophies.join(" · ")}</p>
+      )}
+    </div>
   );
 }
