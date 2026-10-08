@@ -857,7 +857,13 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       {winner && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/90 px-6 animate-fade-in">
           <div className="w-full max-w-sm rounded-3xl border border-primary bg-card p-6 text-center">
-            <p className="font-display text-2xl text-primary">{label[winner]} Wins!</p>
+            <p className="font-display text-2xl text-primary">
+              {forfeit === "opponent-timeout"
+                ? "Opponent didn't return. You win!"
+                : forfeit === "me-timeout"
+                  ? "Connection lost. You forfeited."
+                  : `${label[winner]} Wins!`}
+            </p>
             <p className="mt-2 text-sm text-muted-foreground">
               {elimination
                 ? `All of ${label[winner === 1 ? 2 : 1]}'s pieces were eliminated in ${moveCount} moves.`
