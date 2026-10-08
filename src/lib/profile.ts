@@ -185,3 +185,25 @@ export function getCurrentTitle(): Title | null {
   const unlocked = getUnlockedTitles();
   return unlocked.length > 0 ? unlocked[unlocked.length - 1]! : null;
 }
+
+/** Public, shareable snapshot of this device's profile for online opponents. */
+export function buildPublicProfile(skin: { id: string; name: string; color: string; glow: string }) {
+  const stats = getStats();
+  const unlocked = getUnlockedTitles();
+  const frame = getFrameById(getSelectedFrame());
+  return {
+    name: getProfileName(),
+    skinId: skin.id,
+    skinName: skin.name,
+    skinColor: skin.color,
+    skinGlow: skin.glow,
+    frameName: frame.name,
+    frameColor: frame.borderColor,
+    title: getCurrentTitle()?.name ?? null,
+    trophies: unlocked.length,
+    topTrophies: unlocked.slice(-3).reverse().map((t) => t.name),
+    totalWins: stats.totalWins,
+    totalGames: stats.totalGames,
+    bestWinStreak: stats.bestWinStreak,
+  };
+}

@@ -6,6 +6,7 @@ import {
   remove,
   onValue,
   onDisconnect,
+  serverTimestamp,
   type Unsubscribe,
 } from "firebase/database";
 import { db } from "@/lib/firebase";
@@ -42,7 +43,66 @@ export type Room = {
   settled?: boolean;
   /** Rematch requests for the next round. */
   rematch?: Partial<Record<Player, boolean>>;
+  /** Public, non-sensitive profile each player shares with the opponent. */
+  profiles?: Partial<Record<Player, PublicProfile>>;
+  /** Presence per player: online flag + heartbeat. */
+  presence?: Partial<Record<Player, { online?: boolean; lastSeen?: number }>>;
 };
+
+export type PublicProfile = {
+  name: string;
+  skinId: string;
+  skinName: string;
+  skinColor: string;
+  skinGlow: string;
+  frameName: string;
+  frameColor: string;
+  title: string | null;
+  trophies: number;
+  topTrophies: string[];
+  totalWins: number;
+  totalGames: number;
+  bestWinStreak: number;
+};
+
+/** Seconds we wait for a disconnected player before declaring a forfeit. */
+export const RECONNECT_GRACE_SECONDS = 45;
+/** Heartbeat interval; a player whose heartbeat stops this long is treated as offline. */
+export const HEARTBEAT_MS = 5000;
+export const HEARTBEAT_STALE_MS = 15000;
+
+export async function writeProfile(code: string, player: Player, profile: PublicProfile): Promise<void> {
+  await update(roomRef(code), { [`profiles/${player}`]: profile });
+}
+
+/**
+ * Presence: marks this player online while connected, and lets Firebase flip
+ * it to offline if the connection drops. Also reports our own connection state.
+ */
+export function trackPresence(
+  code: string,
+  player: Player,
+  onConnectionChange: (connected: boolean) => void,
+): () => void {
+  const presRef = ref(db, `rooms/${code}/presence/${player}`);
+  const unsub = onValue(ref(db, ".info/connected"), (snap) => {
+    const connected = snap.val() === true;
+    onConnectionChange(connected);
+    if (!connected) return;
+    void onDisconnect(presRef)
+      .set({ online: false, lastSeen: serverTimestamp() })
+      .then(() => set(presRef, { online: true, lastSeen: serverTimestamp() }))
+      .catch(() => {});
+  });
+  const beat = window.setInterval(() => {
+    void update(presRef, { online: true, lastSeen: serverTimestamp() }).catch(() => {});
+  }, HEARTBEAT_MS);
+  return () => {
+    unsub();
+    window.clearInterval(beat);
+    void onDisconnect(presRef).cancel().catch(() => {});
+  };
+}
 
 export const initialOnlineState = (): OnlineGameState => ({
   pieces: createPieces(),
@@ -173,15 +233,6 @@ export function scheduleRoomCleanup(code: string, delayMs = 30_000): void {
   window.setTimeout(() => {
     void deleteRoom(code);
   }, delayMs);
-}
-
-/** If this device disconnects mid-match, tell the opponent it forfeited. */
-export function armDisconnectForfeit(code: string, player: Player): () => void {
-  const od = onDisconnect(roomRef(code));
-  void od.update({ status: "left", leftBy: player }).catch(() => {});
-  return () => {
-    void od.cancel().catch(() => {});
-  };
 }
 
 export async function requestRematch(code: string, player: Player): Promise<void> {
