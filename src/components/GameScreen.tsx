@@ -607,7 +607,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
               className="h-4 w-4 shrink-0 rounded-full border-2 bg-p2 border-p2-glow"
               style={oppSkinStyle}
             />
-            <span className="truncate font-semibold" style={{ color: oppProfile.frameColor }}>
+            <span className="truncate font-semibold" style={oppProfile.frameName !== "Plain" ? { color: oppProfile.frameColor } : undefined}>
               {oppProfile.name}
             </span>
             {oppProfile.title && <span className="truncate text-muted-foreground">· {oppProfile.title}</span>}
