@@ -28,14 +28,18 @@ import { readProgress, writeProgress, type Settings } from "@/hooks/use-settings
 import { payoutWin, rollLuckyReward, placeStake, getCoins, type LuckyReward } from "@/lib/coins";
 import { App } from "@capacitor/app";
 import { getSelectedSkin, getSkinById } from "@/lib/skins";
-import { getProfileName, addMatchRecord, recordMatchResult } from "@/lib/profile";
+import { getProfileName, addMatchRecord, recordMatchResult, buildPublicProfile } from "@/lib/profile";
 import {
   subscribeRoom,
   pushGameState,
   markRoomFinished,
   normalizeOnlineState,
   markRoomLeft,
-  armDisconnectForfeit,
+  trackPresence,
+  writeProfile,
+  RECONNECT_GRACE_SECONDS,
+  HEARTBEAT_STALE_MS,
+  type PublicProfile,
   requestRematch,
   startRematch,
   chargeStakeOnce,
@@ -122,7 +126,16 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
 
   const selected = pieces.find((p) => p.id === selectedId) ?? null;
   const botTurn = mode === "bot" && turn === 2;
-  const myTurn = mode !== "online" || !online || turn === online.myPlayer;
+  // Online presence: opponent offline → pause; my connection lost → pause.
+  const [oppOffline, setOppOffline] = useState(false);
+  const [myConnLost, setMyConnLost] = useState(false);
+  const [graceLeft, setGraceLeft] = useState(RECONNECT_GRACE_SECONDS);
+  const [forfeit, setForfeit] = useState<null | "opponent-left" | "opponent-timeout" | "me-timeout">(null);
+  const [oppProfile, setOppProfile] = useState<PublicProfile | null>(null);
+  const [showVs, setShowVs] = useState(mode === "online");
+  const paused = mode === "online" && (oppOffline || myConnLost);
+  const myTurn =
+    mode !== "online" || !online || (turn === online.myPlayer && !paused && !forfeit);
 
   // Online sync. We track the last state known to be in Firebase (serialized)
   // and only push when local state differs from it. This avoids the old
@@ -131,6 +144,7 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
   // the default mount state from overwriting the room before it's loaded.
   const lastSynced = useRef<string | null>(null);
   const onlineWinnerRef = useRef<Player | null>(null);
+  const oppLastBeat = useRef(Date.now());
   const [round, setRound] = useState(0);
   const [rematch, setRematch] = useState<Partial<Record<Player, boolean>>>({});
   const onlineStake = mode === "online" && online ? online.stake : 0;
@@ -142,11 +156,19 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
       if (!room) return;
       if (room.status === "left" && room.leftBy !== online.myPlayer) {
         // Leaving mid-match is a forfeit; leaving after the result is just leaving.
-        if (!onlineWinnerRef.current) {
+        if (!onlineWinnerRef.current && !room.settled) {
           setOpponentLeft(true);
+          setForfeit((f) => f ?? "opponent-left");
           if (online.stake > 0) payoutStakeOnce(online.code, room.round ?? 1, online.stake);
         }
         return;
+      }
+      const opp: Player = online.myPlayer === 1 ? 2 : 1;
+      if (room.profiles?.[opp]) setOppProfile(room.profiles[opp]!);
+      const pres = room.presence?.[opp];
+      if (pres) {
+        oppLastBeat.current = Date.now();
+        setOppOffline(pres.online === false);
       }
       setRound(room.round ?? 1);
       setRematch(room.rematch ?? {});
@@ -195,18 +217,53 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
     if (winner === online.myPlayer) payoutStakeOnce(online.code, round, online.stake);
   }, [mode, online, round, winner]);
 
-  // Online: a dropped connection mid-match counts as leaving (forfeit).
+  // Online: share my public profile and track presence for both players.
   useEffect(() => {
-    if (mode !== "online" || !online || !round || winner) return;
-    return armDisconnectForfeit(online.code, online.myPlayer);
-  }, [mode, online, round, winner]);
+    if (mode !== "online" || !online) return;
+    void writeProfile(online.code, online.myPlayer, buildPublicProfile(skin)).catch(() => {});
+    return trackPresence(online.code, online.myPlayer, (c) => setMyConnLost(!c));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, online]);
 
-  // Online: after the opponent leaves, return home shortly.
+  // Heartbeat staleness: treat the opponent as offline if beats stop arriving.
   useEffect(() => {
-    if (!opponentLeft) return;
-    const t = window.setTimeout(onExit, 2500);
+    if (mode !== "online" || !online) return;
+    const t = window.setInterval(() => {
+      if (Date.now() - oppLastBeat.current > HEARTBEAT_STALE_MS) setOppOffline(true);
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [mode, online]);
+
+  // Reconnect countdown while either side is offline; forfeit when it runs out.
+  useEffect(() => {
+    if (!paused || winner || forfeit) {
+      setGraceLeft(RECONNECT_GRACE_SECONDS);
+      return;
+    }
+    const t = window.setInterval(() => setGraceLeft((g) => Math.max(0, g - 1)), 1000);
+    return () => window.clearInterval(t);
+  }, [paused, winner, forfeit]);
+
+  useEffect(() => {
+    if (mode !== "online" || !online || !paused || winner || forfeit || graceLeft > 0) return;
+    const opp: Player = online.myPlayer === 1 ? 2 : 1;
+    if (myConnLost) {
+      setForfeit("me-timeout");
+      setWinner(opp); // syncs when we're back; the opponent already claimed it
+    } else {
+      setForfeit("opponent-timeout");
+      setWinner(online.myPlayer); // pushes finished + settled; payout effect pays once
+    }
+  }, [mode, online, paused, winner, forfeit, graceLeft, myConnLost]);
+
+  // Hide the VS intro after a moment.
+  useEffect(() => {
+    if (!showVs) return;
+    const t = window.setTimeout(() => setShowVs(false), 3500);
     return () => window.clearTimeout(t);
-  }, [opponentLeft, onExit]);
+  }, [showVs]);
+
+
 
   const moves = useMemo(
     () => (selected && points > 0 ? validMoves(pieces, selected, points, rules) : []),
