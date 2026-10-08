@@ -164,7 +164,8 @@ export function GameScreen({ mode, rules = "race", settings, stake, luckyShot, o
         return;
       }
       const opp: Player = online.myPlayer === 1 ? 2 : 1;
-      if (room.profiles?.[opp]) setOppProfile(room.profiles[opp]!);
+      const op = room.profiles?.[opp];
+      if (op) setOppProfile({ ...op, topTrophies: op.topTrophies ?? [], title: op.title ?? null, skinColor: op.skinColor ?? "", skinGlow: op.skinGlow ?? "" });
       const pres = room.presence?.[opp];
       if (pres) {
         oppLastBeat.current = Date.now();
