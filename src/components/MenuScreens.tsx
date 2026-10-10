@@ -57,6 +57,9 @@ import {
   TITLES,
 } from "@/lib/profile";
 import { areAdsRemoved, showRewardedAd } from "@/lib/ads";
+import { IAP_ENABLED } from "@/lib/features";
+import { Share } from "@capacitor/share";
+import { Capacitor } from "@capacitor/core";
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
@@ -416,6 +419,7 @@ export function SettingsScreen({
           </span>
         </button>
 
+        {IAP_ENABLED && (
         <div
           aria-disabled
           className="flex min-h-[60px] w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 opacity-70"
@@ -433,6 +437,7 @@ export function SettingsScreen({
             Coming soon
           </span>
         </div>
+        )}
 
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -756,6 +761,7 @@ export function CoinsScreen({
           </button>
         </div>
 
+        {IAP_ENABLED && (
         <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4">
           <div className="flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
@@ -767,6 +773,7 @@ export function CoinsScreen({
             </div>
           </div>
         </div>
+        )}
       </div>
     </Shell>
   );
@@ -1440,6 +1447,7 @@ export function GemsScreen({
           </button>
         </div>
 
+        {IAP_ENABLED && (
         <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4">
           <div className="flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-secondary">
@@ -1451,6 +1459,7 @@ export function GemsScreen({
             </div>
           </div>
         </div>
+        )}
       </div>
     </Shell>
   );
@@ -1518,7 +1527,15 @@ export function CreateRoomScreen({
   const [copied, setCopied] = useState(false);
 
   const share = async () => {
-    const text = `Join my Hourglass Duel match! Room code: ${code}`;
+    const text = `Join my Hourglass Duel match! Open the app, tap Play Online → Join Room and enter code: ${code}`;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await Share.share({ title: "Hourglass Duel", text, dialogTitle: "Share room code" });
+        return;
+      }
+    } catch {
+      /* fall through to web share */
+    }
     try {
       if (navigator.share) {
         await navigator.share({ text });
