@@ -25,6 +25,7 @@ import { initAds, showBannerAd, hideBannerAd } from "@/lib/ads";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { getCoins, getGems, placeStake, placeStakeWithGems, canPlayLuckyMatch, recordLuckyMatchPlayed } from "@/lib/coins";
 import { getProfileName } from "@/lib/profile";
+import { ONLINE_STAKES_ENABLED } from "@/lib/features";
 import {
   createRoom,
   joinRoom,
@@ -132,6 +133,10 @@ function App() {
   // Host picked a ruleset for the online room, then picks a stake.
   const pickOnlineRules = (r: RuleSet) => {
     setRules(r);
+    if (!ONLINE_STAKES_ENABLED) {
+      void createOnlineRoom(0);
+      return;
+    }
     setScreen("onlineStake");
   };
 
@@ -160,7 +165,7 @@ function App() {
           code: roomCode,
           myPlayer: 1,
           names: { 1: room.hostName, 2: room.guestName },
-          stake: room.stake ?? 0,
+          stake: ONLINE_STAKES_ENABLED ? (room.stake ?? 0) : 0,
         });
         setGameKey((k) => k + 1);
         setScreen("game");
@@ -179,6 +184,7 @@ function App() {
     const name = getProfileName();
     const info = await peekRoom(code);
     if (info === "not-found" || info === "full") return info;
+    if (!ONLINE_STAKES_ENABLED) info.stake = 0;
     if (info.stake > 0 && getCoins() < info.stake) return "no-coins";
     const result = await joinRoom(code, name);
     if (result !== "ok") return result;
@@ -305,7 +311,10 @@ function App() {
     return (
       <JoinRoomScreen
         coins={coins}
-        onPeek={peekRoom}
+        onPeek={async (c) => {
+          const r = await peekRoom(c);
+          return typeof r === "object" && !ONLINE_STAKES_ENABLED ? { ...r, stake: 0 } : r;
+        }}
         onJoin={joinByCode}
         onBack={() => setScreen("online")}
       />

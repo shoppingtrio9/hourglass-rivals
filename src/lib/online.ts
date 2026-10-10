@@ -11,6 +11,7 @@ import {
 } from "firebase/database";
 import { db } from "@/lib/firebase";
 import { spendCoins, payoutWin } from "@/lib/coins";
+import { ONLINE_STAKES_ENABLED } from "@/lib/features";
 import { createPieces, type Piece, type Player, type RuleSet } from "@/lib/game";
 
 /** Serializable match state shared between both players via Firebase. */
@@ -265,13 +266,13 @@ function once(kind: string, code: string, round: number, fn: () => void): boolea
 }
 
 export function chargeStakeOnce(code: string, round: number, stake: number): void {
-  if (stake <= 0) return;
+  if (!ONLINE_STAKES_ENABLED || stake <= 0) return;
   once("charge", code, round, () => {
     spendCoins(stake);
   });
 }
 
 export function payoutStakeOnce(code: string, round: number, stake: number): void {
-  if (stake <= 0) return;
+  if (!ONLINE_STAKES_ENABLED || stake <= 0) return;
   once("payout", code, round, () => payoutWin(stake));
 }
