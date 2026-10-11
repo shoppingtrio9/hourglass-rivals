@@ -57,7 +57,8 @@ import {
   TITLES,
 } from "@/lib/profile";
 import { areAdsRemoved, showRewardedAd } from "@/lib/ads";
-import { IAP_ENABLED } from "@/lib/features";
+import { IAP_ENABLED, SUPPORT_EMAIL, PRIVACY_POLICY_URL, APP_VERSION } from "@/lib/features";
+import { checkName } from "@/lib/name-filter";
 import { Share } from "@capacitor/share";
 import { Capacitor } from "@capacitor/core";
 
@@ -378,12 +379,16 @@ export function SettingsScreen({
   settings,
   onChange,
   onHelp,
+  onTutorial,
+  onSupport,
   onBack,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   onBack: () => void;
   onHelp: () => void;
+  onTutorial: () => void;
+  onSupport: () => void;
 }) {
   const [progress, setProgress] = useState<Progress>(emptyProgress);
   useEffect(() => setProgress(readProgress()), []);
@@ -418,6 +423,24 @@ export function SettingsScreen({
             <span className="block text-xs text-muted-foreground">Rules in 60 seconds</span>
           </span>
         </button>
+
+        {[
+          { label: "Quick Tutorial", sub: "Swipe through the basics", icon: <Sparkles className="h-5 w-5" />, on: onTutorial },
+          { label: "Help & Support", sub: "FAQ, contact us, privacy", icon: <Mail className="h-5 w-5" />, on: onSupport },
+        ].map((r) => (
+          <button
+            key={r.label}
+            type="button"
+            onClick={r.on}
+            className="flex min-h-[60px] w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 active:scale-[0.98]"
+          >
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary">{r.icon}</span>
+            <span className="flex-1 text-left">
+              <span className="block text-sm font-semibold">{r.label}</span>
+              <span className="block text-xs text-muted-foreground">{r.sub}</span>
+            </span>
+          </button>
+        ))}
 
         {IAP_ENABLED && (
         <div
@@ -921,7 +944,14 @@ export function ProfileScreen({
   const currentTitle = getCurrentTitle();
   const unlockedTitleIds = getUnlockedTitles().map((t) => t.id);
 
+  const [nameError, setNameError] = useState<string | null>(null);
   const saveName = () => {
+    const err = checkName(draftName);
+    if (err) {
+      setNameError(err);
+      return;
+    }
+    setNameError(null);
     setProfileName(draftName);
     setName(getProfileName());
     setEditing(false);
@@ -969,7 +999,10 @@ export function ProfileScreen({
             <div className="mt-3 flex items-center justify-center gap-2">
               <input
                 value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
+                onChange={(e) => {
+                  setDraftName(e.target.value);
+                  setNameError(null);
+                }}
                 maxLength={16}
                 className="w-40 rounded-lg border border-border bg-secondary px-3 py-1.5 text-center text-sm"
                 autoFocus
@@ -981,7 +1014,9 @@ export function ProfileScreen({
                 Save
               </button>
             </div>
-          ) : (
+          ) : null}
+          {editing && nameError && <p className="mt-2 text-xs text-destructive">{nameError}</p>}
+          {editing ? null : (
             <button
               onClick={() => {
                 setDraftName(name);
@@ -1675,3 +1710,125 @@ export function JoinRoomScreen({
   );
 }
 
+
+const TUTORIAL: Array<{ icon: React.ReactNode; title: string; body: string }> = [
+  {
+    icon: <Dices className="h-8 w-8 text-primary" />,
+    title: "Goal & turns",
+    body: "Each turn, roll a 1, 2 or 3 and spend those points moving your pieces straight up, down, left or right. You can split points across several pieces.",
+  },
+  {
+    icon: <Flag className="h-8 w-8 text-primary" />,
+    title: "Race Mode",
+    body: `Get all ${PIECES_PER_PLAYER} pieces to your opponent's far rows. Landing on a rival sends it back to start — but pieces in their own home rows are safe.`,
+  },
+  {
+    icon: <Skull className="h-8 w-8 text-primary" />,
+    title: "Elimination Mode",
+    body: "No safe zones. Every capture removes a piece for good. The first player to lose all their pieces loses the match.",
+  },
+  {
+    icon: <Coins className="h-8 w-8 text-primary" />,
+    title: "Coins & Lucky Match",
+    body: "Win coins by beating the bot in stake matches, and claim your daily reward. Lucky Match is a free shot at bonus coins or gems — no loss if you lose.",
+  },
+];
+
+export function TutorialScreen({ onDone }: { onDone: () => void }) {
+  const [i, setI] = useState(0);
+  const [startX, setStartX] = useState<number | null>(null);
+  const last = i === TUTORIAL.length - 1;
+  const step = TUTORIAL[i]!;
+  const go = (d: number) => setI((v) => Math.min(TUTORIAL.length - 1, Math.max(0, v + d)));
+  return (
+    <Shell>
+      <div className="flex justify-end">
+        <button type="button" onClick={onDone} className="rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground">
+          Skip
+        </button>
+      </div>
+      <div
+        className="flex flex-1 flex-col items-center justify-center text-center"
+        onTouchStart={(e) => setStartX(e.touches[0]?.clientX ?? null)}
+        onTouchEnd={(e) => {
+          const x = e.changedTouches[0]?.clientX;
+          if (startX !== null && x !== undefined && Math.abs(x - startX) > 40) go(x < startX ? 1 : -1);
+          setStartX(null);
+        }}
+      >
+        <div key={i} className="animate-fade-in">
+          <span className="mx-auto grid h-20 w-20 place-items-center rounded-3xl border border-border bg-card">{step.icon}</span>
+          <h2 className="mt-6 font-display text-2xl text-primary">{step.title}</h2>
+          <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+        </div>
+      </div>
+      <div className="mb-4 flex justify-center gap-2">
+        {TUTORIAL.map((t, n) => (
+          <span key={t.title} className={`h-2 rounded-full transition-all ${n === i ? "w-6 bg-primary" : "w-2 bg-secondary"}`} />
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => (last ? onDone() : go(1))}
+        className="h-14 w-full rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+      >
+        {last ? "Let's play" : "Next"}
+      </button>
+    </Shell>
+  );
+}
+
+const FAQ: Array<{ q: string; a: string }> = [
+  { q: "How do I play?", a: "Roll 1–3 and move pieces in straight lines. Open Settings → How to Play or Quick Tutorial for the full rules." },
+  { q: "What is Lucky Match?", a: "A free Elimination match against the bot. Win it for a random coin or gem reward; losing costs nothing." },
+  { q: "How does the daily reward work?", a: "Tap the gift on the coins screen once a day to collect free coins. A timer shows when the next one is ready." },
+  { q: "How do online rooms work?", a: "Play Online → Create Room gives you a 6-digit code. Share it with a friend, who enters it under Join Room." },
+  { q: "I lost connection — what happens?", a: "You have 45 seconds to reconnect and carry on. If you don't come back in time, the match counts as a forfeit." },
+  { q: "Someone has an offensive name.", a: "Tap Report on their card during or after the match. You can also Block them to hide their emotes." },
+  { q: "How do I contact you?", a: "Tap Contact us below to send us an email." },
+];
+
+export function SupportScreen({ onBack }: { onBack: () => void }) {
+  const [open, setOpen] = useState<number | null>(0);
+  return (
+    <Shell>
+      <ScreenHeader title="Help & Support" onBack={onBack} />
+      <div className="flex-1 space-y-2 overflow-y-auto pb-4 animate-fade-in">
+        {FAQ.map((f, n) => (
+          <button
+            key={f.q}
+            type="button"
+            onClick={() => setOpen(open === n ? null : n)}
+            className="block w-full rounded-2xl border border-border bg-card p-4 text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold">
+              <HelpCircle className="h-4 w-4 shrink-0 text-primary" /> {f.q}
+            </span>
+            {open === n && <span className="mt-2 block text-sm text-muted-foreground">{f.a}</span>}
+          </button>
+        ))}
+        <a
+          href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Hourglass Duel support (v${APP_VERSION})`)}`}
+          className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-display text-lg text-primary-foreground active:scale-95"
+        >
+          <Mail className="h-5 w-5" /> Contact us
+        </a>
+        {PRIVACY_POLICY_URL ? (
+          <a
+            href={PRIVACY_POLICY_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-12 w-full items-center justify-center rounded-2xl border border-border bg-secondary text-sm font-semibold"
+          >
+            Privacy Policy
+          </a>
+        ) : (
+          <div className="flex h-12 w-full items-center justify-center rounded-2xl border border-border bg-secondary text-sm font-semibold opacity-60">
+            Privacy Policy — coming soon
+          </div>
+        )}
+        <p className="pt-2 text-center text-xs text-muted-foreground">Hourglass Duel · version {APP_VERSION}</p>
+      </div>
+    </Shell>
+  );
+}

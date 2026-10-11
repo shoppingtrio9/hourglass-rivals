@@ -17,6 +17,8 @@ import {
   OnlineModeScreen,
   CreateRoomScreen,
   JoinRoomScreen,
+  TutorialScreen,
+  SupportScreen,
 } from "@/components/MenuScreens";
 import type { RuleSet } from "@/lib/game";
 import { useSettings } from "@/hooks/use-settings";
@@ -58,6 +60,8 @@ export const Route = createFileRoute("/")({
   component: App,
 });
 
+const TUTORIAL_KEY = "hourglass-tutorial-seen";
+
 type Screen =
   | "loading"
   | "home"
@@ -76,6 +80,8 @@ type Screen =
   | "profile"
   | "settings"
   | "help"
+  | "tutorial"
+  | "support"
   | "game";
 
 function App() {
@@ -92,6 +98,7 @@ function App() {
   const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
   const [luckyAvailable, setLuckyAvailable] = useState(true);
   const { settings, update } = useSettings();
+  const [tutorialBack, setTutorialBack] = useState<Screen>("home");
 
   useEffect(() => {
     initAds();
@@ -103,7 +110,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setScreen("home"), 1600);
+    const t = window.setTimeout(() => {
+      let seen = true;
+      try {
+        seen = window.localStorage.getItem(TUTORIAL_KEY) === "1";
+      } catch {
+        /* ignore */
+      }
+      setTutorialBack("home");
+      setScreen(seen ? "home" : "tutorial");
+    }, 1600);
     return () => window.clearTimeout(t);
   }, []);
 
@@ -231,9 +247,28 @@ function App() {
         settings={settings}
         onChange={update}
         onHelp={() => setScreen("help")}
+        onTutorial={() => {
+          setTutorialBack("settings");
+          setScreen("tutorial");
+        }}
+        onSupport={() => setScreen("support")}
         onBack={() => setScreen("home")}
       />
     );
+  if (screen === "tutorial")
+    return (
+      <TutorialScreen
+        onDone={() => {
+          try {
+            window.localStorage.setItem(TUTORIAL_KEY, "1");
+          } catch {
+            /* ignore */
+          }
+          setScreen(tutorialBack);
+        }}
+      />
+    );
+  if (screen === "support") return <SupportScreen onBack={() => setScreen("settings")} />;
   if (screen === "help") return <HelpScreen onBack={() => setScreen("settings")} />;
   if (screen === "coins")
     return (
