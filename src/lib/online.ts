@@ -1,6 +1,7 @@
 import {
   ref,
   set,
+  push,
   get,
   update,
   remove,
@@ -48,6 +49,8 @@ export type Room = {
   profiles?: Partial<Record<Player, PublicProfile>>;
   /** Presence per player: online flag + heartbeat. */
   presence?: Partial<Record<Player, { online?: boolean; lastSeen?: number }>>;
+  /** Latest quick emote per player. */
+  emotes?: Partial<Record<Player, { id: string; t: number }>>;
 };
 
 export type PublicProfile = {
@@ -275,4 +278,34 @@ export function chargeStakeOnce(code: string, round: number, stake: number): voi
 export function payoutStakeOnce(code: string, round: number, stake: number): void {
   if (!ONLINE_STAKES_ENABLED || stake <= 0) return;
   once("payout", code, round, () => payoutWin(stake));
+}
+
+// ---- Quick emotes: one tiny node per player, overwritten each time ----
+export const EMOTES = [
+  { id: "gg", emoji: "🤝", text: "Good game" },
+  { id: "wow", emoji: "😮", text: "Wow" },
+  { id: "nice", emoji: "👏", text: "Nice move" },
+  { id: "oops", emoji: "😅", text: "Oops" },
+  { id: "hi", emoji: "👋", text: "Hello" },
+  { id: "think", emoji: "🤔", text: "Hmm…" },
+  { id: "lol", emoji: "😂", text: "Haha" },
+  { id: "luck", emoji: "🍀", text: "Good luck" },
+] as const;
+export type EmoteId = (typeof EMOTES)[number]["id"];
+export const EMOTE_COOLDOWN_MS = 2000;
+
+export async function sendEmote(code: string, player: Player, id: EmoteId): Promise<void> {
+  await set(ref(db, `rooms/${code}/emotes/${player}`), { id, t: Date.now() });
+}
+
+// ---- Reports ----
+export type ReportReason = "offensive-name" | "cheating" | "harassment" | "other";
+
+export async function submitReport(r: {
+  roomCode: string;
+  reporterName: string;
+  reportedName: string;
+  reason: ReportReason;
+}): Promise<void> {
+  await push(ref(db, "reports"), { ...r, createdAt: serverTimestamp() });
 }
