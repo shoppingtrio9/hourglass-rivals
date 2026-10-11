@@ -1,4 +1,3 @@
-    recordLuckyMatchPlayed();
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { GameScreen, type GameMode, type OnlineSession } from "@/components/GameScreen";
